@@ -6,7 +6,7 @@
 
 - **双引擎并行**：同时集成ollama和GPTsovits引擎（api_v2,具体参考GPTsovits），实现高效稳定的对话处理
 - **低延迟对话**：优化语音识别和合成流程，实现快速响应
-- **Live2D支持**：支持多种Live2D模型（如Haru、hiyori等），提供生动的角色表现
+- **Live2D支持**：支持Live2D v3模型
 - **实时语音同步**：通过mic_lipsync模块实现口型与语音的精确同步
 - **模块化设计**：包含LLM、TTS、STT等独立模块，便于扩展和维护
 
@@ -17,8 +17,10 @@
    pip install -r requirements.txt
    ```
 
-2. 配置环境变量：
-   .env为deepseek api配置
+2. 配置环境变量.env：
+   ```bash
+   DEEPSEEK_API_KEY = ""
+   ```
 
 3. 运行主程序：
    ```bash
@@ -28,16 +30,23 @@
    右键模型可以打开对话窗口，开启关闭语音输入，语音输出
    ![主界面和模型显示](./assets/主界面和模型显示.png)
 
-
+## 事项
+- [x] GPTsovits 对接
+- [x] deepseek api对接
+- [X] stream流语音合成并行处理
+- [ ] 接入Cosyvoice语音合成
+- [ ] 记忆实现
+- [ ] 游戏性、互动性、情绪性、成长性
+- [ ] LLM人物姿态驱动  
 
 ## 鸣谢
 
 本项目使用了以下开源库和资源：
 
-- **live2d-py**：提供live2d角色模型加载和动画支持
-- **ollama**：用于语言模型推理
-- **GPTsovits**：用于语音合成
-- **realtimeSTT**：用于音频实时识别
+- **[live2d-py](https://github.com/Arkueid/live2d-py)**：提供live2d角色模型加载和动画支持
+- **[ollama](https://ollama.com/)**：用于语言模型推理
+- **[GPTsovits](https://ollama.com/)**：用于语音合成
+- **[realtimeSTT](https://github.com/Arkueid/live2d-py)**：用于音频实时识别
 - **其他依赖库**：详见requirements.txt
 
 特别感谢所有开源社区贡献者和项目维护者。
