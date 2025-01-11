@@ -1,6 +1,7 @@
 live2d-py
 PyOpenGL>=3.1.0
 PyAudio>=0.2.13
-PyQt6==6.6.1
+PyQt6
 ollama
+openai
 RealtimeSTT>=0.1.6
