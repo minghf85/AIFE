@@ -1,345 +1,81 @@
-import threading
-from queue import Queue
-from collections import deque
-import pyaudio as pa
-import time
-import wave
-import requests
-import io
-import os
-from datetime import datetime
+from PyQt6.QtCore import QThread, pyqtSignal
+from RealtimeSTT import AudioToTextRecorder
 
-from requests.auth import CONTENT_TYPE_FORM_URLENCODED
+class STTThread(QThread):
+    text_signal = pyqtSignal(str)
+    test_signal = pyqtSignal(str)
+    STTmodel_ready_signal = pyqtSignal()
 
-class AudioPlayer:
-    def __init__(self, play_device=None):
+    def __init__(self, config):
+        super().__init__()
+        # 添加实时转录相关配置
+        self.config = config.copy()
+        self.config.update({
+            'on_realtime_transcription_update': self.process_text  # 实时转录回调
+        })
         self.running = True
-        self.audio_cache = deque()
-        self.cache_lock = threading.Lock()
-        self.cache_event = threading.Event()
-        self.p = pa.PyAudio()
-        self.stream = None
-        self.play_device = play_device
-        self.setup_stream()
-        self.error_count = 0
-        self.max_errors = 3
-        self.is_playing = False
-        self.last_play_time = time.time()
-        self.total_played = 0
-        self.saved_audio = bytearray()  # 用于保存音频数据
-        self.save_audio = False  # 是否保存音频数据的标志
-        
-    def setup_stream(self):
-        try:
-            if self.stream is not None:
-                self.stream.stop_stream()
-                self.stream.close()
-            
-            self.stream = self.p.open(
-                format=self.p.get_format_from_width(2),
-                channels=1,
-                rate=32000,
-                output=True,
-                output_device_index=self.play_device
-            )
-        except Exception as e:
-            print(f"设置音频流时出错: {e}")
-            
-    def add_audio_data(self, audio_data):
-        with self.cache_lock:
-            self.audio_cache.append(audio_data)
-            if self.save_audio:
-                self.saved_audio.extend(audio_data)
-        self.cache_event.set()
-        
-    def get_cache_size(self):
-        with self.cache_lock:
-            return len(self.audio_cache)
-            
+        self.is_testing = False
+        self.recorder = None
+        self.paused = True
+        self.last_text = ""
+        self.control_panel = None
+
+    def set_control_panel(self, control_panel):
+        """设置控制面板引用"""
+        self.control_panel = control_panel
+
     def run(self):
-        while self.running:
-            try:
-                if not self.audio_cache:
-                    self.cache_event.wait(timeout=0.1)
-                    self.cache_event.clear()
-                    continue
-                    
-                with self.cache_lock:
-                    if not self.audio_cache:
-                        continue
-                    audio_data = self.audio_cache.popleft()
+        try:
+            if not self.recorder:
+                # 创建录音器
+                self.recorder = AudioToTextRecorder(**self.config)
                 
-                if audio_data:
-                    self.stream.write(audio_data)
-                    self.is_playing = True
-                    self.last_play_time = time.time()
-                    self.total_played += len(audio_data)
-                else:
-                    self.is_playing = False
-                    
-            except Exception as e:
-                print(f"音频播放错误: {e}")
-                self.error_count += 1
-                if self.error_count >= self.max_errors:
-                    print("错误次数过多，重新设置音频流")
-                    self.setup_stream()
-                    self.error_count = 0
-                time.sleep(0.1)
-                
-    def stop(self):
-        self.running = False
-        try:
-            if self.stream is not None:
-                self.stream.stop_stream()
-                self.stream.close()
-        except Exception as e:
-            print(f"关闭音频流时出错: {e}")
-        self.p.terminate()
-        
-    def wait_for_cache_empty(self):
-        while self.get_cache_size() > 0:
-            time.sleep(0.1)
-
-class TTSThread:
-    def __init__(self, tts_settings, stream=None, play_device=None, save_wav=False):
-        """
-        初始化实时TTS系统
-        :param tts_settings: TTS设置，包含所有必要的参数
-        :param stream: 文本流，用于实时生成文本
-        :param play_device: 播放设备索引，默认为None使用系统默认设备
-        :param save_wav: 是否保存音频文件
-        """
-        self.tts_settings = tts_settings
-        self.stream = stream
-        self.text_queue = Queue()
-        self.running = False
-        self.audio_player = AudioPlayer(play_device)
-        self.audio_thread = None
-        self.tts_thread = None
-        self.stream_thread = None
-        # 检查是否有初始文本需要处理
-        self.initial_text = self.tts_settings.get("text")
-        self.full_text = self.initial_text
-        self.content = ""
-        self.save_wav = save_wav
-        self.text_ready = threading.Event()  # 添加事件标志
-        
-        # 如果需要保存音频，创建保存目录
-        if self.save_wav:
-            self.audio_dir = os.path.join("logs", "audio")
-            os.makedirs(self.audio_dir, exist_ok=True)
-            self.audio_player.save_audio = True
-            
-    def _save_current_audio(self):
-        """保存当前音频"""
-        if not self.save_wav or not self.audio_player.saved_audio:
-            return
-            
-        try:
-            # 生成文件名
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = os.path.join(self.audio_dir, f"tts_{timestamp}.wav")
-            
-            # 创建WAV文件
-            with wave.open(filename, 'wb') as wf:
-                wf.setnchannels(1)  # 单声道
-                wf.setsampwidth(2)  # 16位采样
-                wf.setframerate(32000)  # 采样率
-                wf.writeframes(self.audio_player.saved_audio)
-            print(f"音频已保存到: {filename}")
-            
-            # 清理已保存的音频数据
-            self.audio_player.saved_audio = bytearray()
-            
-        except Exception as e:
-            print(f"保存音频失败: {e}")
-            
-    def process_text(self):
-        """处理文本并生成音频"""
-        # 如果有初始文本，先处理它
-        if self.initial_text and self.running:
-            print(f"处理初始文本: {self.initial_text}")
-            self._synthesize_text(self.initial_text)
-            self.initial_text = None  # 清除初始文本，避免重复处理
-        
-        while self.running:
-            try:
-                if not self.text_queue.empty():
-                    text = self.text_queue.get()
-                    if text:
-                        self._synthesize_text(text)
-            except Exception as e:
-                print(f"TTS处理错误: {e}")
-                time.sleep(1)
-            time.sleep(0.001)
-            
-    def _synthesize_text(self, text):
-        """合成单个文本并播放"""
-        try:
-            print(f"正在合成文本: {text}")
-            # 保存当前设置中的文本
-            original_text = self.tts_settings.get("text")
-            
-            # 设置要合成的文本
-            self.tts_settings["text"] = text
-            
-            # 发送请求
-            response = requests.post(
-                "http://127.0.0.1:6880/tts",
-                json=self.tts_settings,
-                stream=True,
-                headers={'Accept': 'audio/x-wav'}
-            )
-            
-            if response.status_code == 200:
-                first_chunk = True
-                for chunk in response.iter_content(chunk_size=1024):
+                # 等待 recorder.is_running 变为 True
+                while not self.recorder.is_running:
                     if not self.running:
-                        break
-                        
-                    if chunk:
-                        if first_chunk and chunk.startswith(b'RIFF'):
-                            chunk = chunk[44:]
-                            first_chunk = False
-                        
-                        if len(chunk) > 0:
-                            if self.save_wav:
-                                self.audio_player.save_audio = True
-                            self.audio_player.add_audio_data(chunk)
-                            
-                print(f"文本合成完成: {text}")
+                        return
+                    self.msleep(100)
                 
-                # 如果不是流式输入，保存当前音频
-                if not self.stream and self.save_wav:
-                    print("保存音频...")
-                    self._save_current_audio()
-                    
-            else:
-                print(f"语音合成失败: {response.text}")
-                
-            # 恢复原始文本设置
-            self.tts_settings["text"] = original_text
+                # 发送模型就绪信号
+                self.STTmodel_ready_signal.emit()
             
+                # 开始录音和识别循环
+                while self.running:
+                    if not self.paused:
+                        # 获取识别结果
+                        result = self.recorder.text()
+                        # 如果不是测试模式且有control_panel，则更新输入框
+                        if result and not self.is_testing and self.control_panel and self.control_panel.voice_input_enabled and not self.control_panel.user_editing:
+                            self.control_panel.sendMessage(result)
+                    else:
+                        self.msleep(100)
+                
         except Exception as e:
-            print(f"处理文本时出错: {e}")
-            
-    def process_stream(self):
-        """处理文本流"""
-        if not self.stream:
-            return
-            
-        current_segment = ""
-        
-        for chunk in self.stream:
-            if not self.running:
-                break
-            
+            print(f"Error in STT Thread: {e}")
 
-            if chunk.choices[0].delta.constent:
-                content = chunk.choices[0].delta.content
-                self.full_text += content
-                current_segment += content
-                    
-                    # 当遇到标点符号时，将文本加入队列
-                if any(p in current_segment for p in '。！？.!?'):
-                    self.text_queue.put(current_segment)
-                    print(current_segment)
-                    current_segment = ""
-                    
-        # 处理最后剩余的文本
-        if current_segment and self.running:
-            self.text_queue.put(current_segment)
-            
-        # 等待所有文本处理完成
-        while not self.text_queue.empty() and self.running:
-            time.sleep(0.1)
-            
-        # 等待音频处理和播放完成
-        time.sleep(1.0)  # 增加等待时间
-        
-        # 等待音频缓存处理完成
-        self.audio_player.wait_for_cache_empty()
-        
-        # 再等待一小段时间确保音频完全处理完成
-        time.sleep(0.5)
-            
-        # 如果是流式输入，保存完整音频
-        if self.save_wav and self.audio_player.saved_audio:
-            print("保存流式合成的完整音频...")
-            self._save_current_audio()
-            
-        # 设置文本准备完成标志
-        self.text_ready.set()
-            
-    def get_full_text(self):
-        """等待并获取完整文本"""
-        self.text_ready.wait()  # 等待文本准备完成
-        return self.full_text
-        
-    def start(self):
-        """启动TTS系统"""
-        if self.running:
-            return
-            
-        self.running = True
-        
-        # 启动TTS线程
-        self.tts_thread = threading.Thread(target=self.process_text)
-        self.tts_thread.daemon = True
-        self.tts_thread.start()
-        
-        # 如果有文本流，启动流处理线程
-        if self.stream:
-            self.stream_thread = threading.Thread(target=self.process_stream)
-            self.stream_thread.daemon = True
-            self.stream_thread.start()
-            
-        # 清理之前的音频数据
-        self.audio_player.saved_audio = bytearray()
-        
-        # 启动音频播放线程
-        self.audio_thread = threading.Thread(target=self.audio_player.run)
-        self.audio_thread.daemon = True
-        self.audio_thread.start()
-        
-        print(f"音频保存状态: {'启用' if self.save_wav else '禁用'}")
-        if self.save_wav:
-            print(f"音频保存目录: {self.audio_dir}")
-            
+    def process_text(self, text):
+        """处理实时转录的文本"""
+        if text != self.last_text and not self.is_testing:
+            self.last_text = text
+            # 发送文本用于显示
+            self.text_signal.emit(text)
+        elif text != self.last_text and self.is_testing:
+            self.last_text = text
+            self.test_signal.emit(text)
+
+    def pause(self):
+        """暂停录音"""
+        if self.recorder:
+            self.paused = True
+            self.recorder.stop()
+
+    def resume(self):
+        """恢复录音"""
+        self.paused = False
+
     def stop(self):
-        """停止TTS系统"""
-        print("正在停止TTS系统...")
-        
-        # 等待当前队列中的文本处理完成
-        if self.text_queue and not self.text_queue.empty():
-            print("等待当前文本处理完成...")
-            while not self.text_queue.empty() and self.running:
-                time.sleep(0.1)
-            
-        # 等待音频处理完成
-        if self.audio_player:
-            print("等待音频处理完成...")
-            self.audio_player.wait_for_cache_empty()
-            time.sleep(0.5)  # 额外等待一小段时间
-            
+        """停止线程"""
         self.running = False
-        
-        # 确保在停止前保存音频
-        if self.save_wav and self.audio_player.saved_audio:
-            print("停止前保存音频...")
-            self._save_current_audio()
-            
-        if self.audio_player:
-            self.audio_player.stop()
-            
-        if self.audio_thread:
-            self.audio_thread.join(timeout=1.0)
-        if self.tts_thread:
-            self.tts_thread.join(timeout=1.0)
-        if self.stream_thread:
-            self.stream_thread.join(timeout=1.0)
-            
-    def add_text(self, text):
-        """添加文本到队列"""
-        if self.running:
-            self.text_queue.put(text)
+        if self.recorder:
+            self.recorder.stop()
+        self.wait()
