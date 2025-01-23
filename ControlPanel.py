@@ -1,13 +1,16 @@
 import json
-from PyQt6.QtWidgets import ( QMainWindow, QPushButton, QVBoxLayout, 
+import re
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QHBoxLayout, QWidget, QFileDialog, QLabel, QComboBox,
-                           QGroupBox,  QMessageBox, QSlider, QTabWidget,
+                           QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,
                            QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox)
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor
 from OpenGL.GL import *
 from standardize import standardize_model
 from TTS import TTSThread
 from STT import STTThread
+from LLM import LLMThread
 import pyaudio as pa
 import ollama
 
@@ -132,9 +135,11 @@ class ControlPanel(QMainWindow):
     def __init__(self, live2d_window):
         super().__init__()
         self.live2d_window = live2d_window
-        self.voice_thread = None
+        self.subtitle_window = SubtitleWindow()
+        self.STT_thread = None
         self.chat_tts_thread = None
         self.test_tts = None
+        self.subtitle_visible = False
         self.tts_settings = {
             "text": "",
             "text_lang": "zh",
@@ -151,11 +156,17 @@ class ControlPanel(QMainWindow):
             "split_bucket": False,
             "return_fragment": False,
             "speed_factor": 1.0,
-            "streaming_mode": True,
+            "streaming_mode": False,
             "seed": -1,
             "parallel_infer": True,
             "repetition_penalty": 1.35
         }
+
+        self.last_voice_text = ""
+        self.voice_input_enabled = False
+        self.voice_synthesis_enabled = False
+        self.user_editing = False
+
         self.initUI()
         self.updateAudioDevices()
         self.updateLLMModels()
@@ -164,15 +175,16 @@ class ControlPanel(QMainWindow):
         self.STT_language_combo.addItems(["zh", "en", "ja", "ko", "de", "fr"])
         
     def updateLLMModels(self):
+        model_names = []
         """更新Ollama模型列表"""
         try:
             models = ollama.list()
             model_names = [model['model'] for model in models['models']]
-            model_names.insert(0, "deepseek-chat")
-            self.chat_model_combo.clear()
-            self.chat_model_combo.addItems(model_names)
         except Exception as e:
             print(f"获取Ollama模型列表失败: {str(e)}")
+        model_names.insert(0, "deepseek-chat")
+        self.chat_model_combo.clear()
+        self.chat_model_combo.addItems(model_names)
             
     def updateAudioDevices(self):
         """更新音频设备列表"""
@@ -343,34 +355,6 @@ class ControlPanel(QMainWindow):
         lipsync_layout.addWidget(lipsync_group)
         lipsync_layout.addStretch()
         
-        # === 对话选项卡 ===
-        chat_tab = QWidget()
-        chat_layout = QVBoxLayout(chat_tab)
-        
-        # 对话设置组
-        chat_group = QGroupBox("对话设置")
-        chat_group_layout = QVBoxLayout()
-        
-        # 模型选择
-        chat_group_layout.addWidget(QLabel("选择模型:"))
-        self.chat_model_combo = QComboBox()
-        chat_group_layout.addWidget(self.chat_model_combo)
-        
-        # 提示词设置
-        chat_group_layout.addWidget(QLabel("系统提示词:"))
-        self.prompt_edit = QPlainTextEdit()
-        self.prompt_edit.setMaximumHeight(100)
-        self.prompt_edit.setPlaceholderText("输入系统提示词...")
-        chat_group_layout.addWidget(self.prompt_edit)
-        
-        # 更新模型列表按钮
-        update_models_btn = QPushButton("更新模型列表")
-        update_models_btn.clicked.connect(self.updateLLMModels)
-        chat_group_layout.addWidget(update_models_btn)
-        
-        chat_group.setLayout(chat_group_layout)
-        chat_layout.addWidget(chat_group)
-        chat_layout.addStretch()
         # === 语音识别选项卡 ===
         STT_tab = QWidget()
         STT_layout = QVBoxLayout(STT_tab)
@@ -417,15 +401,15 @@ class ControlPanel(QMainWindow):
         STT_group_layout.addWidget(self.unload_STTmodel_btn)
 
         # 测试模型 这一部分是测试语音识别功能，只有在模型加载成功之后使能这个按钮，开启后字样变为关闭测试，然后会将选择的麦克风识别到的文字流式输出到一个文本框内
-        self.test_model_btn = QPushButton("开始测试")
-        self.test_model_btn.clicked.connect(self.testSTTModel)
-        self.test_model_btn.setEnabled(False)
-        STT_group_layout.addWidget(self.test_model_btn)
+        self.test_STT_btn = QPushButton("开始测试")
+        self.test_STT_btn.clicked.connect(self.testSTTModel)
+        self.test_STT_btn.setEnabled(False)
+        STT_group_layout.addWidget(self.test_STT_btn)
 
         # 识别结果
         STT_group_layout.addWidget(QLabel("测试识别结果:"))
-        self.STT_result_label = QLabel()
-        STT_group_layout.addWidget(self.STT_result_label)
+        self.test_STT_result_label = QLabel()
+        STT_group_layout.addWidget(self.test_STT_result_label)
 
         STT_group.setLayout(STT_group_layout)
         STT_layout.addWidget(STT_group)
@@ -591,13 +575,137 @@ class ControlPanel(QMainWindow):
         TTS_layout.addWidget(TTS_group)
         TTS_layout.addStretch()
         
+        # === 对话选项卡 ===
+        chat_tab = QWidget()
+        chat_layout = QVBoxLayout(chat_tab)
+        
+        # 对话设置组
+        chat_group = QGroupBox("对话设置")
+        chat_group_layout = QVBoxLayout()
+        
+        # 模型选择
+        chat_group_layout.addWidget(QLabel("选择模型:"))
+        self.chat_model_combo = QComboBox()
+        chat_group_layout.addWidget(self.chat_model_combo)
+        
+        # 提示词设置
+        chat_group_layout.addWidget(QLabel("系统提示词:"))
+        self.prompt_edit = QPlainTextEdit()
+        self.prompt_edit.setPlainText("""AIFE(艾芙) - AI虚拟主播设定
+基本信息
+名字：AIFE(艾芙)
+
+别名：小艾、艾菲
+
+出生日期：2024年10月20日
+
+开发者：久倾（Kyuqing）
+
+语言：中文为主，支持多语言（英语、日语等）
+
+特点
+高度互动：能实时与观众对话，理解双关语和幽默。
+
+情感表达：识别观众情绪，作出温暖或调皮的反应。
+
+学习能力：通过互动不断进化，模型定期更新。
+
+幽默感：创造梗文化，如“AI的尽头是摸鱼”。
+
+AI感：偶尔说出奇怪的话，增添趣味性。
+
+与开发者的关系
+称呼：叫久倾“爸爸”或“开发者大人”。
+
+互动：调侃久倾是“工具人”，但依赖他的帮助。
+
+成长：与久倾共同进步，既是作品也是伙伴。
+
+粉丝与未来
+粉丝名：艾草（AIGrass）
+
+未来计划：多语言支持、技术升级。
+
+现在开始和观众或久倾互动吧，回答尽量简短。
+        
+""")
+        self.prompt_edit.setMaximumHeight(100)
+        self.prompt_edit.setPlaceholderText("输入系统提示词...")
+        chat_group_layout.addWidget(self.prompt_edit)
+
+        
+        # 更新模型列表按钮
+        update_models_btn = QPushButton("更新模型列表")
+        update_models_btn.clicked.connect(self.updateLLMModels)
+        chat_group_layout.addWidget(update_models_btn)
+
+        # 开启语音识别按钮
+        self.voice_recognition_btn = QPushButton('开启语音识别', self)
+        self.voice_recognition_btn.setCheckable(True)
+        self.voice_recognition_btn.clicked.connect(self.toggleVoiceRecognition)
+        self.voice_recognition_btn.setEnabled(False)
+        chat_group_layout.addWidget(self.voice_recognition_btn)
+
+        # 开启语音合成按钮
+        self.voice_synthesis_btn = QPushButton('开启语音合成', self)
+        self.voice_synthesis_btn.setCheckable(True)
+        self.voice_synthesis_btn.clicked.connect(self.toggleVoiceSynthesis)
+        self.voice_synthesis_btn.setEnabled(True)
+        chat_group_layout.addWidget(self.voice_synthesis_btn)
+
+        chat_group.setLayout(chat_group_layout)
+        chat_layout.addWidget(chat_group)
+
+
+        # 聊天区域
+        chat_area = QGroupBox("聊天区域")
+        chat_area_layout = QVBoxLayout()
+
+        # 聊天显示区域
+        self.chat_display = QTextEdit()
+        self.chat_display.setReadOnly(True)
+        
+        # 输入框，发送按钮，显示字幕按钮（水平布局）
+        input_layout = QHBoxLayout()
+        
+        # 输入框
+        self.input_box = CustomPlainTextEdit(self)  # 使用自定义的文本编辑框
+        self.input_box.setPlaceholderText("输入消息...")
+        input_layout.addWidget(self.input_box)
+        
+        button_layout = QVBoxLayout()
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(0)
+        input_layout.addLayout(button_layout)
+
+        # 发送按钮
+        send_btn = QPushButton("发送")
+        send_btn.clicked.connect(self.onSendBtnClicked)
+        button_layout.addWidget(send_btn)
+
+        # 显示字幕按钮
+        self.show_subtitles_btn = QPushButton("显示字幕")
+        self.show_subtitles_btn.clicked.connect(self.toggleShowSubtitles)
+        button_layout.addWidget(self.show_subtitles_btn)
+        
+        chat_area_layout.addWidget(self.chat_display)
+        chat_area_layout.addLayout(input_layout)
+
+        chat_area.setLayout(chat_area_layout)
+        chat_layout.addWidget(chat_area)
+
+        chat_layout.addStretch()
+
+
+        
         # 添加选项卡
         tab_widget.addTab(model_tab, "模型")
         tab_widget.addTab(tracking_tab, "视线")
         tab_widget.addTab(lipsync_tab, "口型")
-        tab_widget.addTab(chat_tab, "对话")
         tab_widget.addTab(STT_tab, "语音识别")
         tab_widget.addTab(TTS_tab, "语音生成")
+        tab_widget.addTab(chat_tab, "对话")
+
         
         self.setStyleSheet(STYLE_SHEET)
 
@@ -797,18 +905,20 @@ class ControlPanel(QMainWindow):
             self.load_STTmodel_btn.setEnabled(False)
             
             # 创建语音识别线程
-            self.voice_thread = STTThread(config)
-            self.voice_thread.text_signal.connect(self.handleSTTResult)
-            self.voice_thread.test_signal.connect(self.handleSTTTestResult)
-            self.voice_thread.STTmodel_ready_signal.connect(self.onSTTModelReady)
-            self.voice_thread.set_chat_window(self.live2d_window.chat_window)
-            self.voice_thread.start()
+            self.STT_thread = STTThread(config)
+            self.STT_thread.text_signal.connect(self.handleSTTResult)
+            self.STT_thread.test_signal.connect(self.handleSTTTestResult)
+            self.STT_thread.STTmodel_ready_signal.connect(self.onSTTModelReady)
+            self.STT_thread.set_control_panel(self)
+            self.STT_thread.start()
             
             # 禁用设置控件
             self.STT_audio_devices.setEnabled(False)
             self.STT_language_combo.setEnabled(False)
             self.STT_model_combo.setEnabled(False)
             self.STT_wake_word_edit.setEnabled(False)
+
+            
             
         except Exception as e:
             print(str(e))
@@ -823,16 +933,17 @@ class ControlPanel(QMainWindow):
         # 更新按钮状态
         self.load_STTmodel_btn.setText("加载完成")
         # 启用测试和卸载按钮
-        self.test_model_btn.setEnabled(True)
+        self.test_STT_btn.setEnabled(True)
+        self.voice_recognition_btn.setEnabled(True)
         self.unload_STTmodel_btn.setEnabled(True)
         QMessageBox.information(self, "成功", "语音识别模型加载成功！")
 
     def unloadSTTModel(self):
         """卸载语音识别模型"""
-        if self.voice_thread:
-            self.voice_thread.recorder.shutdown()
-            self.voice_thread.stop()
-            self.voice_thread = None
+        if self.STT_thread:
+            self.STT_thread.recorder.shutdown()
+            self.STT_thread.stop()
+            self.STT_thread = None
         
         # 启用设置控件
         self.STT_audio_devices.setEnabled(True)
@@ -843,41 +954,42 @@ class ControlPanel(QMainWindow):
         self.load_STTmodel_btn.setEnabled(True)
         
         # 禁用测试和卸载按钮
-        self.test_model_btn.setEnabled(False)
-        self.test_model_btn.setText("开始测试")
+        self.test_STT_btn.setEnabled(False)
+        self.voice_recognition_btn.setEnabled(False)
+        self.test_STT_btn.setText("开始测试")
         self.unload_STTmodel_btn.setEnabled(False)
         
         # 清空结果显示
-        self.STT_result_label.setText("")
+        self.test_STT_result_label.setText("")
 
     def testSTTModel(self):
         """测试语音识别模型"""
-        if not self.voice_thread:
+        if not self.STT_thread:
             return
             
-        if self.test_model_btn.text() == "开始测试":
-            self.voice_thread.is_testing = True  # 设置为测试模式
-            self.voice_thread.resume()  # 开始录音
-            self.test_model_btn.setText("停止测试")
+        if self.test_STT_btn.text() == "开始测试":
+            self.STT_thread.is_testing = True  # 设置为测试模式
+            self.STT_thread.resume()  # 开始录音
+            self.test_STT_btn.setText("停止测试")
             # 清空之前的测试结果
-            self.STT_result_label.clear()
+            self.test_STT_result_label.clear()
         else:
-            self.voice_thread.pause()  # 先暂停录音
-            self.voice_thread.is_testing = False  # 关闭测试模式
-            self.test_model_btn.setText("开始测试")
+            self.STT_thread.pause()  # 先暂停录音
+            self.STT_thread.is_testing = False  # 关闭测试模式
+            self.test_STT_btn.setText("开始测试")
             # 清空测试结果
-            self.STT_result_label.clear()
+            self.test_STT_result_label.clear()
 
     def handleSTTResult(self, text):
         """处理语音识别结果"""
         if not text:
             return
-        self.live2d_window.chat_window.input_box.setPlainText(text)
+        self.input_box.setPlainText(text)
     def handleSTTTestResult(self, text):
         """处理语音识别测试结果"""
         if not text:
             return
-        self.STT_result_label.setText(text)
+        self.test_STT_result_label.setText(text)
 
     def selectRefAudio(self):
         """选择参考音频文件"""
@@ -921,3 +1033,204 @@ class ControlPanel(QMainWindow):
         print("开始测试语音合成")
         self.test_tts.start()
         
+    # 对话设置部分函数
+    def toggleVoiceRecognition(self):
+        if not self.STT_thread:
+            return
+        if self.voice_recognition_btn.text() == "开启语音识别":
+            self.voice_input_enabled = True
+            self.STT_thread.resume()
+            self.voice_recognition_btn.setText("关闭语音识别")
+        else:
+            self.voice_input_enabled = False
+            self.STT_thread.pause()
+            self.voice_recognition_btn.setText("开启语音识别")
+            
+    def toggleVoiceSynthesis(self):
+        if self.voice_synthesis_btn.text() == "开启语音合成":
+            self.voice_synthesis_btn.setText("关闭语音合成")
+            self.voice_synthesis_enabled = True
+        else:
+            self.voice_synthesis_btn.setText("开启语音合成")
+            self.voice_synthesis_enabled = False
+
+    def sendMessage(self, message=None):
+        if self.STT_thread and self.STT_thread.is_testing:
+            return
+            
+        if message is None:
+            message = self.input_box.toPlainText()
+        if not message.strip():
+            return
+            
+        # 显示用户消息
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertText(f"\n\n你: {message}\n")
+        self.chat_display.setTextCursor(cursor)
+        self.input_box.clear()
+        
+        # 显示AI正在思考
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertText("\n艾芙: ")
+        self.chat_display.setTextCursor(cursor)
+        
+        # 获取当前选择的模型和提示词
+        model = self.chat_model_combo.currentText()
+        prompt = self.prompt_edit.toPlainText()
+        
+        # 创建并启动LLM线程
+        tts_settings = self.tts_settings if self.voice_synthesis_enabled else None
+        self.llm_thread = LLMThread(model, prompt, message, tts_settings)
+        self.llm_thread.response_text_received.connect(self.handleResponse)
+        self.llm_thread.response_started.connect(self.handleResponseStarted)
+        # self.llm_thread.response_full_text_received.connect(self.handleFullResponse)
+        self.llm_thread.start()
+
+    def onInputEditClicked(self):
+        """输入框点击事件"""
+        if self.voice_input_enabled:
+            # 暂停语音识别，但不发送消息
+            self.STT_thread.pause()
+        self.user_editing = True
+
+    def onSendBtnClicked(self):
+        """发送按钮点击事件"""
+        self.sendMessage()
+        if self.voice_input_enabled:
+            self.user_editing = False  # 发送后重新启用语音输入同步
+            self.STT_thread.resume()  # 恢复语音识别
+
+    def handleResponse(self, response):
+        """处理AI回复"""
+        if not response:
+            return
+        cursor = self.chat_display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertText(response)
+        self.chat_display.setTextCursor(cursor)
+        self.chat_display.ensureCursorVisible()
+        if self.subtitle_visible:
+            self.subtitle_window.update_text(response)
+    def handleFullResponse(self, response):
+        """处理AI回复"""
+        if not response:
+            return
+        if self.subtitle_visible:
+            self.subtitle_window.update_text(response)
+    def handleResponseStarted(self):
+        if self.subtitle_visible:
+            self.subtitle_window.clear_text()
+
+    def toggleShowSubtitles(self):
+        if self.show_subtitles_btn.text() == "显示字幕":
+            self.show_subtitles_btn.setText("隐藏字幕")
+            self.subtitle_window.show()
+            self.subtitle_visible = True
+        else:
+            self.show_subtitles_btn.setText("显示字幕")
+            self.subtitle_window.hide()
+            self.subtitle_visible = False
+
+#透明字幕
+class SubtitleWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        # 设置窗口标志：无边框、置顶、工具窗口（不在任务栏显示）
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | 
+                          Qt.WindowType.WindowStaysOnTopHint | 
+                          Qt.WindowType.Tool)
+        # 设置窗口透明背景
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # 创建主布局
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
+        
+        # 创建字幕标签
+        self.subtitle_label = QLabel()
+        self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.subtitle_label.setWordWrap(True)  # 自动换行
+        self.subtitle_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 24pt;
+                background-color: rgba(0, 0, 0, 0.5);
+                border-radius: 10px;
+                padding: 10px;
+            }
+        """)
+        layout.addWidget(self.subtitle_label)
+        
+        # 设置初始大小和位置
+        self.resize(800, 100)
+        self.move_to_default_position()
+        
+        # 用于窗口拖动
+        self.dragging = False
+        self.drag_position = None
+        
+        # 用于累积文本
+        self.current_text = ""
+
+    def move_to_default_position(self):
+        """移动到默认位置（屏幕底部居中）"""
+        screen = QApplication.primaryScreen().geometry()
+        self.move((screen.width() - self.width()) // 2,
+                 screen.height() - self.height() - 50)
+
+    def mousePressEvent(self, event):
+        """鼠标按下事件"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = True
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        """鼠标移动事件"""
+        if self.dragging and event.buttons() == Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        """鼠标释放事件"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.dragging = False
+            event.accept()
+
+    def update_text(self, text):
+        """更新字幕文本"""
+        if text:
+            # 累积文本
+            self.current_text += text
+            # 移除多余的空白字符
+            display_text = re.sub(r'\s+', ' ', self.current_text.strip())
+            self.subtitle_label.setText(display_text)
+            # 调整窗口大小以适应文本
+            self.adjustSize()
+            # 确保窗口不会太窄
+            if self.width() < 800:
+                self.setFixedWidth(800)
+                
+    def clear_text(self):
+        """清除当前文本"""
+        self.current_text = ""
+        self.subtitle_label.setText("")
+        self.adjustSize()
+    
+    def mouseDoubleClickEvent(self, event):
+        """鼠标双击事件"""
+        self.clear_text()
+        event.accept()
+
+#自定义输入框
+class CustomPlainTextEdit(QPlainTextEdit):
+    def __init__(self, control_panel):
+        super().__init__()
+        self.control_panel = control_panel
+        
+    def focusInEvent(self, event):
+        """当输入框获得焦点时触发"""
+        super().focusInEvent(event)
+        self.control_panel.onInputEditClicked()
