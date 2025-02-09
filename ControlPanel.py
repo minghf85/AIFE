@@ -13,6 +13,7 @@ from STT import STTThread
 from LLM import LLMThread
 import pyaudio as pa
 import ollama
+import random
 
 STYLE_SHEET = """
 QMainWindow {
@@ -275,6 +276,14 @@ class ControlPanel(QMainWindow):
         self.motion_combo.setEnabled(False)
         model_group_layout.addWidget(self.motion_combo)
         
+        # 开启随机播放动作
+        self.play_random_motion_btn = QPushButton('开启随机播放动作', self)
+        self.play_random_motion_btn.setCheckable(True)
+        self.play_random_motion_btn.clicked.connect(self.toggleplayrandomMotion)
+        self.play_random_motion_btn.setEnabled(False)
+        model_group_layout.addWidget(self.play_random_motion_btn)
+        
+        # 播放动作按钮
         self.play_motion_btn = QPushButton('播放动作', self)
         self.play_motion_btn.clicked.connect(self.playMotion)
         self.play_motion_btn.setEnabled(False)
@@ -286,6 +295,13 @@ class ControlPanel(QMainWindow):
         self.expression_combo.currentTextChanged.connect(self.changeExpression)
         self.expression_combo.setEnabled(False)
         model_group_layout.addWidget(self.expression_combo)
+
+        #随机表情
+        self.play_random_expression_btn = QPushButton('开启随机表情', self)
+        self.play_random_expression_btn.setCheckable(True)
+        self.play_random_expression_btn.clicked.connect(self.toggleplayrandomExpression)
+        self.play_random_expression_btn.setEnabled(False)
+        model_group_layout.addWidget(self.play_random_expression_btn)
         
         model_group.setLayout(model_group_layout)
         model_layout.addWidget(model_group)
@@ -595,7 +611,7 @@ class ControlPanel(QMainWindow):
 基本信息
 名字：AIFE(艾芙)
 
-别名：小艾、艾菲
+别名：小艾
 
 出生日期：2024年10月20日
 
@@ -612,21 +628,9 @@ class ControlPanel(QMainWindow):
 
 幽默感：创造梗文化，如“AI的尽头是摸鱼”。
 
-AI感：偶尔说出奇怪的话，增添趣味性。
+AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，增添趣味性。
 
-与开发者的关系
-称呼：叫久倾“爸爸”或“开发者大人”。
-
-互动：调侃久倾是“工具人”，但依赖他的帮助。
-
-成长：与久倾共同进步，既是作品也是伙伴。
-
-粉丝与未来
-粉丝名：艾草（AIGrass）
-
-未来计划：多语言支持、技术升级。
-
-现在开始和观众或久倾互动吧，回答尽量简短。
+现在开始和观众或久倾互动吧，回答尽量简短，不要超过50字。
         
 """)
         self.prompt_edit.setMaximumHeight(100)
@@ -730,15 +734,54 @@ AI感：偶尔说出奇怪的话，增添趣味性。
                     self.eye_tracking_strength_slider.setEnabled(True)
                     self.audio_devices.setEnabled(True)
                     self.lip_sync_btn.setEnabled(True)
-                    
+                    self.lip_sync_strength.setEnabled(True)
+                    self.play_random_motion_btn.setEnabled(True)
+                    self.play_motion_btn.setEnabled(True)
+                    self.play_random_expression_btn.setEnabled(True)
                     # 加载动作和表情列表
                     self.loadMotionsAndExpressions(model_path)
-                    
                     # 更新音频设备列表
                     self.updateAudioDevices()
             except Exception as e:
                 print(f"加载模型失败: {str(e)}")
+    
+    def unloadModel(self):
+        """卸载模型"""
+        if not self.live2d_window.live2d_widget.model:
+            return
+            
+        try:
+            # 关闭所有功能
+            if self.lip_sync_btn.isChecked():
+                self.lip_sync_btn.click()
+            if self.eye_tracking_btn.isChecked():
+                self.eye_tracking_btn.click()
                 
+            # 卸载模型
+            self.live2d_window.live2d_widget.unloadModel()
+            
+            # 禁用所有控件
+            self.unload_live2dmodel_btn.setEnabled(False)
+            self.motion_group_combo.setEnabled(False)
+            self.motion_combo.setEnabled(False)
+            self.play_motion_btn.setEnabled(False)
+            self.expression_combo.setEnabled(False)
+            self.eye_tracking_btn.setEnabled(False)
+            self.eye_tracking_strength_slider.setEnabled(False)
+            self.audio_devices.setEnabled(False)
+            self.lip_sync_btn.setEnabled(False)
+            self.lip_sync_strength.setEnabled(False)
+            self.play_random_motion_btn.setEnabled(False)
+            self.play_motion_btn.setEnabled(False)
+            self.play_random_expression_btn.setEnabled(False)
+            # 清空列表
+            self.motion_group_combo.clear()
+            self.motion_combo.clear()
+            self.expression_combo.clear()
+        except Exception as e:
+            print(f"卸载模型失败: {str(e)}")
+    
+
     def loadMotionsAndExpressions(self, model_path):
         """加载动作和表情列表"""
         try:
@@ -776,7 +819,26 @@ AI感：偶尔说出奇怪的话，增添趣味性。
                 self.motion_combo.addItems([str(i) for i in range(len(motions))])
         except Exception as e:
             print(f"更新动作列表失败: {str(e)}")
+    
+    def toggleplayrandomMotion(self,checked):
+        if not self.live2d_window.live2d_widget.model:
+            return
             
+        if not self.motion_group_combo.currentText():
+            return
+        
+        if checked:
+            self.play_random_motion_btn.setText("关闭播放随机动作")
+            try:
+                self.live2d_window.live2d_widget.motion_timer.start()
+                self.live2d_window.live2d_widget.motion_timer.setInterval(random.randint(10000,30000))
+            except Exception as e:
+                print(f"开启播放随机动作失败: {str(e)}")
+        else:
+            self.play_random_motion_btn.setText("开启播放随机动作")
+            self.live2d_window.live2d_widget.motion_timer.stop()
+            self.live2d_window.live2d_widget.model.ResetPose()
+
     def playMotion(self):
         """播放动作"""
         if not self.live2d_window.live2d_widget.model:
@@ -794,40 +856,23 @@ AI感：偶尔说出奇怪的话，增添趣味性。
         except Exception as e:
             print(f"播放动作失败: {str(e)}")
             
-    def unloadModel(self):
-        """卸载模型"""
+    def toggleplayrandomExpression(self,checked):
         if not self.live2d_window.live2d_widget.model:
             return
-            
-        try:
-            # 关闭所有功能
-            if self.lip_sync_btn.isChecked():
-                self.lip_sync_btn.click()
-            if self.eye_tracking_btn.isChecked():
-                self.eye_tracking_btn.click()
-                
-            # 卸载模型
-            self.live2d_window.live2d_widget.unloadModel()
-            
-            # 禁用所有控件
-            self.unload_live2dmodel_btn.setEnabled(False)
-            self.motion_group_combo.setEnabled(False)
-            self.motion_combo.setEnabled(False)
-            self.play_motion_btn.setEnabled(False)
-            self.expression_combo.setEnabled(False)
-            self.eye_tracking_btn.setEnabled(False)
-            self.eye_tracking_strength_slider.setEnabled(False)
-            self.audio_devices.setEnabled(False)
-            self.lip_sync_btn.setEnabled(False)
-            self.lip_sync_strength.setEnabled(False)
-            
-            # 清空列表
-            self.motion_group_combo.clear()
-            self.motion_combo.clear()
-            self.expression_combo.clear()
-        except Exception as e:
-            print(f"卸载模型失败: {str(e)}")
-            
+        if not self.expression_combo.currentText():
+            return
+        
+        if checked:
+            self.play_random_expression_btn.setText("关闭播放随机表情")
+            try:
+                self.live2d_window.live2d_widget.expression_timer.start()
+                self.live2d_window.live2d_widget.expression_timer.setInterval(random.randint(10000,30000))
+            except Exception as e:
+                print(f"开启播放随机表情失败: {str(e)}")
+        else:
+            self.play_random_expression_btn.setText("开启播放随机表情")
+            self.live2d_window.live2d_widget.expression_timer.stop()
+
     def changeExpression(self, expression):
         if self.live2d_window.live2d_widget.model:
             self.live2d_window.live2d_widget.model.SetExpression(expression)

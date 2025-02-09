@@ -9,7 +9,7 @@ from OpenGL.GL import *
 import live2d.v3 as live2d
 from mic_lipsync import MicLipSync
 from LLM import LLMThread
-
+import random
 #opengl-live2d窗口
 class TransparentOpenGLWidget(QOpenGLWidget):
     def __init__(self, parent=None):
@@ -47,6 +47,16 @@ class TransparentOpenGLWidget(QOpenGLWidget):
         self.eye_tracking_timer.setInterval(16)  # 约60fps
         self.AllParams={}
         
+        # 随机动作相关
+        self.motion_timer = QTimer()
+        self.motion_timer.timeout.connect(self.playRandomMotion)
+        self.motion_timer.setInterval(random.randint(10000,30000))  # 5-10秒播放一次动作
+
+        #随机表情相关
+        self.expression_timer = QTimer()
+        self.expression_timer.timeout.connect(self.playRandomExpression)
+        self.expression_timer.setInterval(random.randint(10000,30000))  # 5-10秒播放一次表情
+
     def initializeGL(self):
         # 初始化live2d
         live2d.init()
@@ -106,6 +116,7 @@ class TransparentOpenGLWidget(QOpenGLWidget):
                 # 2. 应用视线跟踪
                 if self.eye_tracking_enabled:
                     self.updateEyeTracking()
+                
                 
                 # 执行绘制
                 self.model.Draw()
@@ -272,7 +283,26 @@ class TransparentOpenGLWidget(QOpenGLWidget):
         except Exception as e:
             print(f"更新视线跟踪参数时出错: {str(e)}")
             self.cleanup()  # 出错时清理资源
-            
+
+
+    def playRandomMotion(self):
+        print("播放随机动作")
+        if not self.model:
+            return
+        try:
+            self.model.StartRandomMotion()
+        except Exception as e:
+            print(f"播放随机动作时出错: {str(e)}")
+    
+    def playRandomExpression(self):
+        if not self.model:
+            return
+        try:
+            print("播放随机表情")
+            self.model.SetRandomExpression()
+        except Exception as e:
+            print(f"播放随机表情时出错: {str(e)}")
+           
     def loadModel(self, model_path):
         if not self.initialized:
             return
