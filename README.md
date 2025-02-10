@@ -17,7 +17,7 @@
    pip install -r requirements.txt
    ```
 
-2. 配置环境变量.env：
+2. 配置环境变量.env(不需要引号)：
    ```bash
    DEEPSEEK_API_KEY = ""
    ```
