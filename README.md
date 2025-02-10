@@ -19,15 +19,16 @@
 
 2. 配置环境变量.env(不需要引号)：
    ```bash
-   DEEPSEEK_API_KEY = ""
+   DEEPSEEK_API_KEY = sk-xxxxxxxxxxxxxxxxx
    ```
 
 3. 运行主程序：
    ```bash
    python main.py
    ```
-4. 演示：
-   右键模型可以打开对话窗口，开启关闭语音输入，语音输出
+4. 页面介绍
+   
+5. 演示：
    ![主界面和模型显示](./assets/主界面和模型显示.png)
 
 ## 事项
@@ -46,7 +47,7 @@
 - **[live2d-py](https://github.com/Arkueid/live2d-py)**：提供live2d角色模型加载和动画支持
 - **[ollama](https://ollama.com/)**：用于语言模型推理
 - **[GPTsovits](https://ollama.com/)**：用于语音合成
-- **[realtimeSTT](https://github.com/Arkueid/live2d-py)**：用于音频实时识别
+- **[realtimeSTT](https://github.com/KoljaB/RealtimeSTT)**：用于音频实时识别
 - **其他依赖库**：详见requirements.txt
 
 特别感谢所有开源社区贡献者和项目维护者。

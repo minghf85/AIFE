@@ -175,6 +175,9 @@ class ControlPanel(QMainWindow):
         # 初始化语音识别语言选项
         self.STT_language_combo.addItems(["zh", "en", "ja", "ko", "de", "fr"])
         
+        # 在初始化完成后加载配置
+        self.loadsettings()
+        
     def updateLLMModels(self):
         model_names = []
         """更新Ollama模型列表"""
@@ -399,7 +402,7 @@ class ControlPanel(QMainWindow):
         STT_group_layout.addWidget(self.STT_model_combo)
         
         # 唤醒词 可以自定义
-        STT_group_layout.addWidget(QLabel("唤醒词:"))
+        STT_group_layout.addWidget(QLabel("唤醒词(暂不可用X):"))
         self.STT_wake_word_edit = QPlainTextEdit()
         self.STT_wake_word_edit.setMaximumHeight(100)
         self.STT_wake_word_edit.setPlaceholderText("输入唤醒词...")
@@ -556,15 +559,6 @@ class ControlPanel(QMainWindow):
         
         TTS_group_layout.addLayout(params_layout)
         
-        # 扬声器选择
-        audio_layout = QHBoxLayout()
-        audio_label = QLabel("输出设备:")
-        self.TTS_audio_devices = QComboBox()
-        self.TTS_audio_devices.setEnabled(True)
-        audio_layout.addWidget(audio_label)
-        audio_layout.addWidget(self.TTS_audio_devices)
-        TTS_group_layout.addLayout(audio_layout)
-        
         # Streaming Mode
         stream_layout = QHBoxLayout()
         self.stream_checkbox = QCheckBox("流式响应")
@@ -574,6 +568,15 @@ class ControlPanel(QMainWindow):
         stream_layout.addStretch()
         TTS_group_layout.addLayout(stream_layout)
         
+        # 扬声器选择
+        audio_layout = QHBoxLayout()
+        audio_label = QLabel("输出设备:")
+        self.TTS_audio_devices = QComboBox()
+        self.TTS_audio_devices.setEnabled(True)
+        audio_layout.addWidget(audio_label)
+        audio_layout.addWidget(self.TTS_audio_devices)
+        TTS_group_layout.addLayout(audio_layout)
+
         # 测试文本输入
         test_text_label = QLabel("测试文本:")
         self.test_text_input = QTextEdit()
@@ -626,7 +629,7 @@ class ControlPanel(QMainWindow):
 
 学习能力：通过互动不断进化，模型定期更新。
 
-幽默感：创造梗文化，如“AI的尽头是摸鱼”。
+幽默感：创造梗文化，如"AI的尽头是摸鱼"。
 
 AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，增添趣味性。
 
@@ -700,8 +703,20 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         chat_layout.addStretch()
 
+        #设置选项卡包括保存配置
+        settings_tab = QWidget()
+        settings_layout = QVBoxLayout(settings_tab)
+        #保存配置
+        savesettings_group = QGroupBox("保存配置")
+        savesettings_group_layout = QVBoxLayout()
+        #添加保存配置按钮
+        self.save_settings_btn = QPushButton("保存配置")
+        self.save_settings_btn.clicked.connect(self.savesettings)
+        savesettings_group_layout.addWidget(self.save_settings_btn)
+        savesettings_group.setLayout(savesettings_group_layout)
+        settings_layout.addWidget(savesettings_group)
+        settings_layout.addStretch()
 
-        
         # 添加选项卡
         tab_widget.addTab(model_tab, "模型")
         tab_widget.addTab(tracking_tab, "视线")
@@ -709,6 +724,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         tab_widget.addTab(STT_tab, "语音识别")
         tab_widget.addTab(TTS_tab, "语音生成")
         tab_widget.addTab(chat_tab, "对话")
+        tab_widget.addTab(settings_tab, "设置")
 
         
         self.setStyleSheet(STYLE_SHEET)
@@ -723,6 +739,8 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         model_path, _ = QFileDialog.getOpenFileName(self, "选择模型文件", "", "模型文件 (*.model3.json)")
         if model_path:
             try:
+                # 加载成功后显示 Live2D 窗口
+                self.live2d_window.show()
                 if self.live2d_window.live2d_widget.loadModel(model_path):
                     # 启用所有控件
                     self.unload_live2dmodel_btn.setEnabled(True)
@@ -738,10 +756,13 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                     self.play_random_motion_btn.setEnabled(True)
                     self.play_motion_btn.setEnabled(True)
                     self.play_random_expression_btn.setEnabled(True)
+                    
                     # 加载动作和表情列表
                     self.loadMotionsAndExpressions(model_path)
                     # 更新音频设备列表
                     self.updateAudioDevices()
+                    
+                    
             except Exception as e:
                 print(f"加载模型失败: {str(e)}")
     
@@ -759,6 +780,9 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 
             # 卸载模型
             self.live2d_window.live2d_widget.unloadModel()
+            
+            # 隐藏 Live2D 窗口
+            self.live2d_window.hide()
             
             # 禁用所有控件
             self.unload_live2dmodel_btn.setEnabled(False)
@@ -1179,7 +1203,94 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.subtitle_visible = False
 
     def savesettings(self):
-        pass
+        """保存配置到 settings.json"""
+        settings = {
+            # 语音识别设置
+            "stt_settings": {
+                "language": self.STT_language_combo.currentText(),
+                "model": self.STT_model_combo.currentText(),
+                "wake_words": self.STT_wake_word_edit.toPlainText().strip()
+            },
+            
+            # 语音生成设置
+            "tts_settings": {
+                "text_lang": self.text_lang_combo.currentText(),
+                "prompt_lang": self.prompt_lang_combo.currentText(),
+                "prompt_text": self.prompt_text_input.toPlainText(),
+                "ref_audio_path": self.ref_audio_path.text(),
+                "aux_ref_audio_paths": self.tts_settings["aux_ref_audio_paths"],
+                "top_k": self.topk_spin.value(),
+                "top_p": self.topp_spin.value(),
+                "temperature": self.temp_spin.value(),
+                "speed_factor": self.speed_spin.value(),
+                "batch_size": self.batch_spin.value(),
+                "text_split_method": self.split_combo.currentText(),
+                "streaming_mode": self.stream_checkbox.isChecked()
+            },
+            
+            # 对话设置
+            "chat_settings": {
+                "model": self.chat_model_combo.currentText(),
+                "system_prompt": self.prompt_edit.toPlainText()
+            }
+        }
+        
+        try:
+            with open('settings.json', 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=4)
+            QMessageBox.information(self, "成功", "配置已保存！")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"保存配置失败: {str(e)}")
+
+    def loadsettings(self):
+        """从 settings.json 加载配置"""
+        try:
+            with open('settings.json', 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                
+            # 加载语音识别设置
+            stt_settings = settings.get("stt_settings", {})
+            if stt_settings:
+                self.STT_language_combo.setCurrentText(stt_settings.get("language", "zh"))
+                self.STT_model_combo.setCurrentText(stt_settings.get("model", "large-v3"))
+                self.STT_wake_word_edit.setPlainText(stt_settings.get("wake_words", ""))
+                
+            # 加载语音生成设置
+            tts_settings = settings.get("tts_settings", {})
+            if tts_settings:
+                self.text_lang_combo.setCurrentText(tts_settings.get("text_lang", "zh"))
+                self.prompt_lang_combo.setCurrentText(tts_settings.get("prompt_lang", "zh"))
+                self.prompt_text_input.setPlainText(tts_settings.get("prompt_text", ""))
+                self.ref_audio_path.setText(tts_settings.get("ref_audio_path", ""))
+                self.tts_settings["aux_ref_audio_paths"] = tts_settings.get("aux_ref_audio_paths", [])
+                self.aux_ref_list.setText("\n".join(self.tts_settings["aux_ref_audio_paths"]))
+                
+                self.topk_spin.setValue(tts_settings.get("top_k", 5))
+                self.topp_spin.setValue(tts_settings.get("top_p", 1.0))
+                self.temp_spin.setValue(tts_settings.get("temperature", 1.0))
+                self.speed_spin.setValue(tts_settings.get("speed_factor", 1.0))
+                self.batch_spin.setValue(tts_settings.get("batch_size", 5))
+                self.split_combo.setCurrentText(tts_settings.get("text_split_method", "cut0"))
+                self.stream_checkbox.setChecked(tts_settings.get("streaming_mode", False))
+                
+                # 更新 tts_settings 字典
+                self.tts_settings.update(tts_settings)
+                
+            # 加载对话设置
+            chat_settings = settings.get("chat_settings", {})
+            if chat_settings:
+                # 等待模型列表更新完成后再设置
+                def set_chat_model():
+                    self.chat_model_combo.setCurrentText(chat_settings.get("model", ""))
+                QApplication.processEvents()  # 处理待处理的事件
+                set_chat_model()
+                self.prompt_edit.setPlainText(chat_settings.get("system_prompt", ""))
+                
+        except FileNotFoundError:
+            # 如果配置文件不存在，使用默认设置
+            pass
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"加载配置失败: {str(e)}")
 
 #透明字幕
 class SubtitleWindow(QWidget):

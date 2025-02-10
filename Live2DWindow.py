@@ -371,6 +371,9 @@ class Live2DWindow(QMainWindow):
         
         # 移动相关
         self.is_moving = False
+        
+        # 初始化时不显示窗口
+        self.hide()
 
     def mousePressEvent(self, event):
         self.oldPos = event.globalPosition().toPoint()

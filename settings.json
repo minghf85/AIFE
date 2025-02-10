@@ -1,0 +1,25 @@
+{
+    "stt_settings": {
+        "language": "zh",
+        "model": "tiny",
+        "wake_words": ""
+    },
+    "tts_settings": {
+        "text_lang": "zh",
+        "prompt_lang": "zh",
+        "prompt_text": "呵哼哼，想要拿到它的话，就先加油追上我吧。",
+        "ref_audio_path": "H:/AIVtuber/VOICE_reference/HAPPY.wav",
+        "aux_ref_audio_paths": [],
+        "top_k": 5.0,
+        "top_p": 1.0,
+        "temperature": 1.0,
+        "speed_factor": 1.0,
+        "batch_size": 5.0,
+        "text_split_method": "cut0",
+        "streaming_mode": false
+    },
+    "chat_settings": {
+        "model": "deepseek-r1:14b",
+        "system_prompt": "AIFE(艾芙) - AI虚拟主播设定\n基本信息\n名字：AIFE(艾芙)\n\n别名：小艾\n\n出生日期：2024年10月20日\n\n开发者：久倾（Kyuqing）\n\n语言：中文为主，支持多语言（英语、日语等）\n\n特点\n高度互动：能实时与观众对话，理解双关语和幽默。\n\n情感表达：识别观众情绪，作出温暖或调皮的反应。\n\n学习能力：通过互动不断进化，模型定期更新。\n\n幽默感：创造梗文化，如\"AI的尽头是摸鱼\"。\n\nAI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，增添趣味性。\n\n现在开始和观众或久倾互动吧。回答尽量简短幽默有趣。\n        \n"
+    }
+}
