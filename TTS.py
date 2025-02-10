@@ -229,7 +229,7 @@ class TTSThread:
             return
             
         current_segment = ""
-        
+        first_sentence_in = True
         for chunk in self.stream:
             if not self.running:
                 break
@@ -239,11 +239,18 @@ class TTSThread:
                 content = chunk.choices[0].delta.content
                 self.full_text += content
                 current_segment += content
-                    
-                    # 当遇到标点符号时，将文本加入队列
-                if any(p in current_segment for p in '。！？.!?'):
+                if chunk.choices[0].finish_reason == "stop":
                     self.text_queue.put(current_segment)
-                    print(current_segment)
+                    current_segment = ""
+                if len(current_segment)<6:
+                    continue
+                        # 当遇到标点符号时，将文本加入队列
+                if any(current_segment.endswith(p) for p in '，,。！？.!?~'):
+                    if first_sentence_in:
+                        self.text_queue.put("."+current_segment)
+                        first_sentence_in = False
+                    else:
+                        self.text_queue.put(current_segment)
                     current_segment = ""
                     
         # 处理最后剩余的文本

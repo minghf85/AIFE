@@ -630,7 +630,7 @@ class ControlPanel(QMainWindow):
 
 AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，增添趣味性。
 
-现在开始和观众或久倾互动吧，回答尽量简短，不要超过50字。
+现在开始和观众或久倾互动吧。回答尽量简短。
         
 """)
         self.prompt_edit.setMaximumHeight(100)
@@ -1177,6 +1177,9 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.show_subtitles_btn.setText("显示字幕")
             self.subtitle_window.hide()
             self.subtitle_visible = False
+
+    def savesettings(self):
+        pass
 
 #透明字幕
 class SubtitleWindow(QWidget):

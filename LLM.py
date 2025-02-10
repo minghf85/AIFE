@@ -43,18 +43,20 @@ class LLMThread(QThread):
                 #self.response_full_text_received.emit(full_response)
                 if self.tts_thread :
                     current_segment += content
-                        
+                    if chunk.choices[0].finish_reason == "stop":
+                        self.tts_thread.add_text(current_segment)
+                        current_segment = ""
+                    if len(current_segment)<6:
+                        continue
                         # 当遇到标点符号时，将文本加入队列
-                    if any(p in current_segment for p in '。！？.!?~'):
+                    if any(current_segment.endswith(p) for p in ',，。！？.!?~'):
                         if first_sentence_in:
                             self.tts_thread.add_text("."+current_segment)
                             first_sentence_in = False
                         else:
                             self.tts_thread.add_text(current_segment)
                         current_segment = ""
-                    elif chunk.choices[0].finish_reason == "stop":
-                        self.tts_thread.add_text(current_segment)
-                        current_segment = ""
+                    
             self.response_finished.emit()
             self.history_messages.append({'role': 'assistant', 'content': full_response})
         except Exception as e:
