@@ -1,5 +1,10 @@
 import json
 import re
+import os
+import subprocess
+import requests
+import win32con
+import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QHBoxLayout, QWidget, QFileDialog, QLabel, QComboBox,
                            QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,
@@ -14,6 +19,7 @@ from LLM import LLMThread
 import pyaudio as pa
 import ollama
 import random
+import yaml
 
 STYLE_SHEET = """
 QMainWindow {
@@ -137,8 +143,9 @@ class ControlPanel(QMainWindow):
         super().__init__()
         self.live2d_window = live2d_window
         self.subtitle_window = SubtitleWindow()
+        self.llm_thread = None
+        self.basettsurl = "http://127.0.0.1:6880"
         self.STT_thread = None
-        self.chat_tts_thread = None
         self.test_tts = None
         self.subtitle_visible = False
         self.tts_settings = {
@@ -437,10 +444,118 @@ class ControlPanel(QMainWindow):
         TTS_tab = QWidget()
         TTS_layout = QVBoxLayout(TTS_tab)
         
-        # 语音生成设置组
-        TTS_group = QGroupBox("语音生成设置")
-        TTS_group_layout = QVBoxLayout()
+        TTS_api_group = QGroupBox("API设置")
+        TTS_api_group_layout = QVBoxLayout()
+
+        # API文件选择
+        api_file_layout = QHBoxLayout()
+        api_file_label = QLabel("api_v2.py文件:")
+        self.api_file_path = QLineEdit("H:/AIVtuber/GPT-SoVITS-v2-240821/GPT-SoVITS-v2-240821")
+        self.api_file_path.setReadOnly(True)
+        api_file_btn = QPushButton("选择文件")
+        api_file_btn.clicked.connect(self.selectAPIFile)
+        api_file_layout.addWidget(api_file_label)
+        api_file_layout.addWidget(self.api_file_path)
+        api_file_layout.addWidget(api_file_btn)
+        TTS_api_group_layout.addLayout(api_file_layout)
+
+
+        # GPT和SoVITS权重设置
+        weights_layout = QGridLayout()
+
+        # GPT权重
+        gpt_label = QLabel("GPT权重:")
+        self.gpt_weights_path = QLineEdit()
+        self.gpt_weights_path.setReadOnly(True)
+        gpt_btn = QPushButton("选择文件")
+        gpt_btn.clicked.connect(self.selectGPTWeights)
+        self.gpt_switch_btn = QPushButton("切换")
+        self.gpt_switch_btn.setEnabled(False)
+        self.gpt_switch_btn.clicked.connect(self.change_gpt_weights)
+
+        weights_layout.addWidget(gpt_label, 0, 0)
+        weights_layout.addWidget(self.gpt_weights_path, 0, 1)
+        weights_layout.addWidget(gpt_btn, 0, 2)
+        weights_layout.addWidget(self.gpt_switch_btn, 0, 3)
+
+        # SoVITS权重
+        sovits_label = QLabel("SoVITS权重:")
+        self.sovits_weights_path = QLineEdit()
+        self.sovits_weights_path.setReadOnly(True)
+        sovits_btn = QPushButton("选择文件")
+        sovits_btn.clicked.connect(self.selectSoVITSWeights)
+        self.sovits_switch_btn = QPushButton("切换")
+        self.sovits_switch_btn.setEnabled(False)
+        self.sovits_switch_btn.clicked.connect(self.change_sovits_weights)
+
+        weights_layout.addWidget(sovits_label, 1, 0)
+        weights_layout.addWidget(self.sovits_weights_path, 1, 1)
+        weights_layout.addWidget(sovits_btn, 1, 2)
+        weights_layout.addWidget(self.sovits_switch_btn, 1, 3)
+
+        # BERT模型设置
+        bert_label = QLabel("BERT模型:")
+        self.bert_weights_path = QLineEdit()
+        self.bert_weights_path.setReadOnly(True)
+        bert_btn = QPushButton("选择目录")
+        bert_btn.clicked.connect(self.selectBertModel)
+
+        weights_layout.addWidget(bert_label, 2, 0)
+        weights_layout.addWidget(self.bert_weights_path, 2, 1)
+        weights_layout.addWidget(bert_btn, 2, 2)
+
+        # CNHubert模型设置
+        cnhubert_label = QLabel("CNHubert模型:")
+        self.cnhubert_weights_path = QLineEdit()
+        self.cnhubert_weights_path.setReadOnly(True)
+        cnhubert_btn = QPushButton("选择目录")
+        cnhubert_btn.clicked.connect(self.selectCNHubertModel)
+
+        weights_layout.addWidget(cnhubert_label, 3, 0)
+        weights_layout.addWidget(self.cnhubert_weights_path, 3, 1)
+        weights_layout.addWidget(cnhubert_btn, 3, 2)
+
+        TTS_api_group_layout.addLayout(weights_layout)
+
+        # API服务器设置
+        server_layout = QGridLayout()
+        host_label = QLabel("服务器地址:")
+        self.host_input = QLineEdit("127.0.0.1")
+        port_label = QLabel("端口:")
+        self.port_input = QLineEdit("6880")
+
+        server_layout.addWidget(host_label, 0, 0)
+        server_layout.addWidget(self.host_input, 0, 1)
+        server_layout.addWidget(port_label, 0, 2)
+        server_layout.addWidget(self.port_input, 0, 3)
+
+        TTS_api_group_layout.addLayout(server_layout)
+
+        # API控制按钮
+        api_control_layout = QHBoxLayout()
+        self.start_api_btn = QPushButton("启动API")
+        self.start_api_btn.clicked.connect(self.start_api)
+        self.restart_api_btn = QPushButton("重启API")
+        self.restart_api_btn.setEnabled(False)
+        self.restart_api_btn.clicked.connect(self.restart_api)
+        self.exit_api_btn = QPushButton("退出API")
+        self.exit_api_btn.setEnabled(False)
+        self.exit_api_btn.clicked.connect(self.exit_api)
+
+        api_control_layout.addWidget(self.start_api_btn)
+        api_control_layout.addWidget(self.restart_api_btn)
+        api_control_layout.addWidget(self.exit_api_btn)
+
+        TTS_api_group_layout.addLayout(api_control_layout)
+
+        TTS_api_group.setLayout(TTS_api_group_layout)
+        TTS_layout.addWidget(TTS_api_group)
+
+        # 推理设置组
+        TTS_infer_group = QGroupBox("推理设置")
+        TTS_infer_group_layout = QVBoxLayout()
         
+
         # 参考音频路径
         ref_audio_layout = QHBoxLayout()
         ref_audio_label = QLabel("参考音频:")
@@ -451,7 +566,7 @@ class ControlPanel(QMainWindow):
         ref_audio_layout.addWidget(ref_audio_label)
         ref_audio_layout.addWidget(self.ref_audio_path)
         ref_audio_layout.addWidget(ref_audio_btn)
-        TTS_group_layout.addLayout(ref_audio_layout)
+        TTS_infer_group_layout.addLayout(ref_audio_layout)
         
         # 辅助参考音频路径
         aux_ref_layout = QHBoxLayout()
@@ -464,7 +579,7 @@ class ControlPanel(QMainWindow):
         aux_ref_layout.addWidget(aux_ref_label)
         aux_ref_layout.addWidget(self.aux_ref_list)
         aux_ref_layout.addWidget(aux_ref_btn)
-        TTS_group_layout.addLayout(aux_ref_layout)
+        TTS_infer_group_layout.addLayout(aux_ref_layout)
         
         # 语言选择
         lang_layout = QGridLayout()
@@ -485,7 +600,7 @@ class ControlPanel(QMainWindow):
         self.prompt_lang_combo.currentTextChanged.connect(lambda x: self.updateTTSSetting("prompt_lang", x))
         lang_layout.addWidget(prompt_lang_label, 0, 2)
         lang_layout.addWidget(self.prompt_lang_combo, 0, 3)
-        TTS_group_layout.addLayout(lang_layout)
+        TTS_infer_group_layout.addLayout(lang_layout)
         
         # 提示文本
         prompt_text_label = QLabel("提示文本:")
@@ -494,8 +609,8 @@ class ControlPanel(QMainWindow):
         self.prompt_text_input.setText("呵哼哼，想要拿到它的话，就先加油追上我吧。")
         self.prompt_text_input.setMaximumHeight(60)
         self.prompt_text_input.textChanged.connect(lambda: self.updateTTSSetting("prompt_text", self.prompt_text_input.toPlainText()))
-        TTS_group_layout.addWidget(prompt_text_label)
-        TTS_group_layout.addWidget(self.prompt_text_input)
+        TTS_infer_group_layout.addWidget(prompt_text_label)
+        TTS_infer_group_layout.addWidget(self.prompt_text_input)
         
         # 语音生成参数
         params_layout = QGridLayout()
@@ -557,7 +672,7 @@ class ControlPanel(QMainWindow):
         params_layout.addWidget(split_label, 2, 2)
         params_layout.addWidget(self.split_combo, 2, 3)
         
-        TTS_group_layout.addLayout(params_layout)
+        TTS_infer_group_layout.addLayout(params_layout)
         
         # Streaming Mode
         stream_layout = QHBoxLayout()
@@ -566,7 +681,7 @@ class ControlPanel(QMainWindow):
         self.stream_checkbox.stateChanged.connect(lambda x: self.updateTTSSetting("streaming_mode", bool(x)))
         stream_layout.addWidget(self.stream_checkbox)
         stream_layout.addStretch()
-        TTS_group_layout.addLayout(stream_layout)
+        TTS_infer_group_layout.addLayout(stream_layout)
         
         # 扬声器选择
         audio_layout = QHBoxLayout()
@@ -575,23 +690,23 @@ class ControlPanel(QMainWindow):
         self.TTS_audio_devices.setEnabled(True)
         audio_layout.addWidget(audio_label)
         audio_layout.addWidget(self.TTS_audio_devices)
-        TTS_group_layout.addLayout(audio_layout)
+        TTS_infer_group_layout.addLayout(audio_layout)
 
         # 测试文本输入
         test_text_label = QLabel("测试文本:")
         self.test_text_input = QTextEdit()
         self.test_text_input.setPlaceholderText("输入要合成的文本...")
         self.test_text_input.setMaximumHeight(100)
-        TTS_group_layout.addWidget(test_text_label)
-        TTS_group_layout.addWidget(self.test_text_input)
+        TTS_infer_group_layout.addWidget(test_text_label)
+        TTS_infer_group_layout.addWidget(self.test_text_input)
         
         # 测试按钮
         self.test_tts_btn = QPushButton("测试语音合成")
         self.test_tts_btn.clicked.connect(self.testTTS)
-        TTS_group_layout.addWidget(self.test_tts_btn)
+        TTS_infer_group_layout.addWidget(self.test_tts_btn)
         
-        TTS_group.setLayout(TTS_group_layout)
-        TTS_layout.addWidget(TTS_group)
+        TTS_infer_group.setLayout(TTS_infer_group_layout)
+        TTS_layout.addWidget(TTS_infer_group)
         TTS_layout.addStretch()
         
         # === 对话选项卡 ===
@@ -690,6 +805,8 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         send_btn.clicked.connect(self.onSendBtnClicked)
         button_layout.addWidget(send_btn)
 
+        #切换说话模式开关
+
         # 显示字幕按钮
         self.show_subtitles_btn = QPushButton("显示字幕")
         self.show_subtitles_btn.clicked.connect(self.toggleShowSubtitles)
@@ -716,6 +833,20 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         savesettings_group.setLayout(savesettings_group_layout)
         settings_layout.addWidget(savesettings_group)
         settings_layout.addStretch()
+
+        # #测试Agent功能
+        # testagentfunction_tab = QWidget()
+        # testagentfunction = QVBoxLayout(testagentfunction_tab)
+        # #随机播放音效按钮
+        # self.randomplayaudio_btn = QPushButton("随机播放音效")
+        # self.randomplayaudio_btn.clicked.connect(self.randomplayaudio)
+        # testagentfunction.addWidget(self.randomplayaudio_btn)
+
+        # #live2d窗口乱跑，躲避鼠标按钮
+        # self.escapemousewindow_btn = QPushButton("移动窗口")
+
+        
+        
 
         # 添加选项卡
         tab_widget.addTab(model_tab, "模型")
@@ -963,9 +1094,9 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 "webrtc_sensitivity":3,
                 "post_speech_silence_duration":0.4, 
                 "min_length_of_recording":0.3, 
-                "min_gap_between_recordings":0.01, 
+                "min_gap_between_recordings":1, 
                 "enable_realtime_transcription" : True,
-                "realtime_processing_pause" : 0.01, 
+                "realtime_processing_pause" : 0.05, 
                 "realtime_model_type" : "tiny"
             }
             
@@ -1124,14 +1255,21 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.voice_synthesis_enabled = False
 
     def sendMessage(self, message=None):
+        
+        
         if self.STT_thread and self.STT_thread.is_testing:
             return
-            
+        
         if message is None:
             message = self.input_box.toPlainText()
         if not message.strip():
             return
-            
+        
+        # 如果有正在运行的LLM线程，先打断它
+        if self.llm_thread:
+            self.llm_thread.interrupt()
+            self.llm_thread.wait()  # 等待线程结束
+
         # 显示用户消息
         cursor = self.chat_display.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
@@ -1151,7 +1289,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         
         # 创建并启动LLM线程
         tts_settings = self.tts_settings if self.voice_synthesis_enabled else None
-        self.llm_thread = LLMThread(model, prompt, message, tts_settings)
+        self.llm_thread = LLMThread(model, prompt, message, self.basettsurl, tts_settings)
         self.llm_thread.response_text_received.connect(self.handleResponse)
         self.llm_thread.response_started.connect(self.handleResponseStarted)
         # self.llm_thread.response_full_text_received.connect(self.handleFullResponse)
@@ -1212,7 +1350,18 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 "wake_words": self.STT_wake_word_edit.toPlainText().strip()
             },
             
-            # 语音生成设置
+            # 推理api配置
+            "api_settings": {
+                "api_path": self.api_file_path.text(),
+                "host": self.host_input.text(),
+                "port": self.port_input.text(),
+                "gpt_weights": self.gpt_weights_path.text(),
+                "sovits_weights": self.sovits_weights_path.text(),
+                "bert_path": self.bert_weights_path.text(),
+                "cnhubert_path": self.cnhubert_weights_path.text()
+            },
+            
+            # tts推理设置
             "tts_settings": {
                 "text_lang": self.text_lang_combo.currentText(),
                 "prompt_lang": self.prompt_lang_combo.currentText(),
@@ -1255,6 +1404,17 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 self.STT_model_combo.setCurrentText(stt_settings.get("model", "large-v3"))
                 self.STT_wake_word_edit.setPlainText(stt_settings.get("wake_words", ""))
                 
+            # 加载推理API设置
+            api_settings = settings.get("api_settings", {})
+            if api_settings:
+                self.api_file_path.setText(api_settings.get("api_path", ""))
+                self.host_input.setText(api_settings.get("host", "127.0.0.1"))
+                self.port_input.setText(api_settings.get("port", "6880"))
+                self.gpt_weights_path.setText(api_settings.get("gpt_weights", ""))
+                self.sovits_weights_path.setText(api_settings.get("sovits_weights", ""))
+                self.bert_weights_path.setText(api_settings.get("bert_path", ""))
+                self.cnhubert_weights_path.setText(api_settings.get("cnhubert_path", ""))
+                
             # 加载语音生成设置
             tts_settings = settings.get("tts_settings", {})
             if tts_settings:
@@ -1291,6 +1451,287 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             pass
         except Exception as e:
             QMessageBox.warning(self, "错误", f"加载配置失败: {str(e)}")
+
+    #api设置组
+    def start_api(self):
+        """启动API服务"""
+        try:
+            # 获取API相关路径
+            api_v2_path = self.api_file_path.text()
+            python_path = os.path.join(api_v2_path, "runtime", "python.exe")
+            config_path = os.path.join(api_v2_path, "GPT_SoVITS", "configs", "tts_infer.yaml")
+            
+            print(f"API路径: {api_v2_path}")
+            print(f"Python路径: {python_path}")
+            print(f"配置文件路径: {config_path}")
+            
+            # 检查文件是否存在
+            if not all([
+                os.path.exists(python_path),
+                os.path.exists(config_path)
+            ]):
+                QMessageBox.warning(self, "错误", "Python解释器或配置文件不存在，请检查路径")
+                return
+            
+            # 更新配置文件
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+                
+                # 更新custom部分的配置
+                if 'custom' not in config:
+                    config['custom'] = {}
+                
+                # 更新权重路径
+                if self.bert_weights_path.text():
+                    config['custom']['bert_base_path'] = self.bert_weights_path.text()
+                if self.cnhubert_weights_path.text():
+                    config['custom']['cnhuhbert_base_path'] = self.cnhubert_weights_path.text()
+                if self.gpt_weights_path.text():
+                    config['custom']['t2s_weights_path'] = self.gpt_weights_path.text()
+                if self.sovits_weights_path.text():
+                    config['custom']['vits_weights_path'] = self.sovits_weights_path.text()
+                
+                # 保存更新后的配置
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    yaml.dump(config, f, allow_unicode=True)
+                    
+            except Exception as e:
+                print(f"更新配置文件失败: {e}")
+                QMessageBox.warning(self, "错误", f"更新配置文件失败: {str(e)}")
+                return
+            
+            # 构建启动命令
+            cmd = [
+                python_path,
+                os.path.join(api_v2_path, "api_v2.py"),
+                "-a", self.host_input.text(),
+                "-p", self.port_input.text(),
+                "-c", config_path
+            ]
+
+            cmd_str = " ".join(f'"{x}"' if " " in x else x for x in cmd)
+            print(f"执行命令: {cmd_str}")
+
+            # 在Windows中使用新的cmd窗口运行命令
+            startup_info = subprocess.STARTUPINFO()
+            startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup_info.wShowWindow = win32con.SW_NORMAL  # 使用 win32con.SW_NORMAL
+
+            self.api_process = subprocess.Popen(
+                f'start cmd /k "{cmd_str}"',
+                shell=True,
+                startupinfo=startup_info,
+                cwd=api_v2_path  # 设置工作目录
+            )
+
+            print("TTS API服务已启动")
+            self.basettsurl = f"http://{self.host_input.text()}:{self.port_input.text()}"
+            # 启用相关按钮
+            self.restart_api_btn.setEnabled(True)
+            self.exit_api_btn.setEnabled(True)
+            self.gpt_switch_btn.setEnabled(True)
+            self.sovits_switch_btn.setEnabled(True)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"启动API服务失败: {str(e)}")
+
+    def restart_api(self):
+        """重启API服务"""
+        try:
+            # 先尝试通过API重启
+            try:
+                response = requests.get(
+                    f"http://{self.host_input.text()}:{self.port_input.text()}/control",
+                    params={"command": "restart"}
+                )
+                if response.status_code == 200:
+                    print("TTS API服务重启命令已发送")
+                    return
+            except:
+                pass
+            
+            # 如果API重启失败，则强制重启
+            self.exit_api()
+            time.sleep(1)
+            self.start_api()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"重启API服务失败: {str(e)}")
+
+    def exit_api(self):
+        """退出API服务"""
+        try:
+            # 先尝试通过API退出
+            try:
+                requests.get(
+                    f"http://{self.host_input.text()}:{self.port_input.text()}/control",
+                    params={"command": "exit"}
+                )
+            except:
+                pass
+            
+            # 强制终止进程
+            if hasattr(self, 'api_process'):
+                self.api_process.terminate()
+                self.api_process.wait()
+                print("TTS API服务已关闭")
+            
+            # 禁用相关按钮
+            self.restart_api_btn.setEnabled(False)
+            self.exit_api_btn.setEnabled(False)
+            self.gpt_switch_btn.setEnabled(False)
+            self.sovits_switch_btn.setEnabled(False)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"关闭API服务失败: {str(e)}")
+
+    def change_gpt_weights(self):
+        """切换GPT权重"""
+        try:
+            response = requests.get(
+                f"http://{self.host_input.text()}:{self.port_input.text()}/set_gpt_weights",
+                params={"weights_path": self.gpt_weights_path.text()}
+            )
+            if response.status_code == 200:
+                QMessageBox.information(self, "成功", "GPT权重切换成功")
+            else:
+                QMessageBox.warning(self, "错误", f"GPT权重切换失败: {response.text}")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"切换GPT权重时出错: {str(e)}")
+
+    def change_sovits_weights(self):
+        """切换SoVITS权重"""
+        try:
+            response = requests.get(
+                f"http://{self.host_input.text()}:{self.port_input.text()}/set_sovits_weights",
+                params={"weights_path": self.sovits_weights_path.text()}
+            )
+            if response.status_code == 200:
+                QMessageBox.information(self, "成功", "SoVITS权重切换成功")
+            else:
+                QMessageBox.warning(self, "错误", f"SoVITS权重切换失败: {response.text}")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"切换SoVITS权重时出错: {str(e)}")
+
+    def selectAPIFile(self):
+        """选择API文件所在目录"""
+        try:
+            directory = QFileDialog.getExistingDirectory(
+                self, 
+                "选择GPT-SoVITS目录",
+                "H:/AIVtuber/GPT-SoVITS-v2-240821"  # 默认目录
+            )
+            if directory:
+                # 检查是否存在必要的文件和目录
+                api_file = os.path.join(directory, "api_v2.py")
+                python_exe = os.path.join(directory, "runtime", "python.exe")
+                config_dir = os.path.join(directory, "GPT_SoVITS", "configs", "tts_infer.yaml")
+                
+                print(f"检查路径:")
+                print(f"API文件: {api_file}")
+                print(f"Python: {python_exe}")
+                print(f"配置文件: {config_dir}")
+                
+                if not all([
+                    os.path.exists(api_file),
+                    os.path.exists(python_exe),
+                    os.path.exists(config_dir)
+                ]):
+                    QMessageBox.warning(self, "错误", "所选目录结构不正确，请选择GPT-SoVITS的根目录")
+                    return
+                    
+                self.api_file_path.setText(directory)
+                print(f"已设置API路径: {directory}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"选择目录时出错: {str(e)}")
+
+    def selectGPTWeights(self):
+        """选择GPT权重文件"""
+        try:
+            # 从api_v2.py所在目录开始浏览
+            start_dir = os.path.join(self.api_file_path.text(), "GPT_weights_v2")
+            if not os.path.exists(start_dir):
+                start_dir = self.api_file_path.text()
+                
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择GPT权重文件",
+                start_dir,
+                "权重文件 (*.ckpt)"
+            )
+            
+            if file_path:
+                self.gpt_weights_path.setText(file_path)
+                
+                    
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"选择GPT权重文件时出错: {str(e)}")
+
+    def selectSoVITSWeights(self):
+        """选择SoVITS权重文件"""
+        try:
+            # 从api_v2.py所在目录开始浏览
+            start_dir = os.path.join(self.api_file_path.text(), "SoVITS_weights_v2")
+            if not os.path.exists(start_dir):
+                start_dir = self.api_file_path.text()
+                
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "选择SoVITS权重文件",
+                start_dir,
+                "权重文件 (*.pth)"
+            )
+            
+            if file_path:
+                self.sovits_weights_path.setText(file_path)
+                
+
+                    
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"选择SoVITS权重文件时出错: {str(e)}")
+
+    def selectBertModel(self):
+        """选择BERT模型目录"""
+        try:
+            # 从api_v2.py所在目录开始浏览
+            start_dir = os.path.join(self.api_file_path.text(), "GPT_SoVITS", "pretrained_models")
+            if not os.path.exists(start_dir):
+                start_dir = self.api_file_path.text()
+                
+            directory = QFileDialog.getExistingDirectory(
+                self,
+                "选择BERT模型目录",
+                start_dir
+            )
+            
+            if directory:
+                self.bert_weights_path.setText(directory)
+
+                    
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"选择BERT模型目录时出错: {str(e)}")
+
+    def selectCNHubertModel(self):
+        """选择CNHubert模型目录"""
+        try:
+            # 从api_v2.py所在目录开始浏览
+            start_dir = os.path.join(self.api_file_path.text(), "GPT_SoVITS", "pretrained_models")
+            if not os.path.exists(start_dir):
+                start_dir = self.api_file_path.text()
+                
+            directory = QFileDialog.getExistingDirectory(
+                self,
+                "选择CNHubert模型目录",
+                start_dir
+            )
+            
+            if directory:
+                self.cnhubert_weights_path.setText(directory)
+
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"选择CNHubert模型目录时出错: {str(e)}")
 
 #透明字幕
 class SubtitleWindow(QWidget):

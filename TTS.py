@@ -100,8 +100,23 @@ class AudioPlayer:
         while self.get_cache_size() > 0:
             time.sleep(0.1)
 
+    def clear(self):
+        """清理所有音频缓存并重置音频流"""
+        with self.cache_lock:
+            self.audio_cache.clear()
+        if self.stream:
+            try:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
+                self.setup_stream()  # 重新初始化音频流
+            except Exception as e:
+                print(f"重置音频流时出错: {e}")
+        self.is_playing = False
+        self.cache_event.clear()
+
 class TTSThread:
-    def __init__(self, tts_settings, stream=None, play_device=None, save_wav=False):
+    def __init__(self, baseurl,tts_settings, stream=None, play_device=None, save_wav=False):
         """
         初始化实时TTS系统
         :param tts_settings: TTS设置，包含所有必要的参数
@@ -109,6 +124,7 @@ class TTSThread:
         :param play_device: 播放设备索引，默认为None使用系统默认设备
         :param save_wav: 是否保存音频文件
         """
+        self.baseurl = baseurl
         self.tts_settings = tts_settings
         self.stream = stream
         self.text_queue = Queue()
@@ -129,7 +145,7 @@ class TTSThread:
             self.audio_dir = os.path.join("logs", "audio")
             os.makedirs(self.audio_dir, exist_ok=True)
             self.audio_player.save_audio = True
-            
+
     def _save_current_audio(self):
         """保存当前音频"""
         if not self.save_wav or not self.audio_player.saved_audio:
@@ -185,7 +201,7 @@ class TTSThread:
             
             # 发送请求
             response = requests.post(
-                "http://127.0.0.1:6880/tts",
+                f"{self.baseurl}/tts",
                 json=self.tts_settings,
                 stream=True,
                 headers={'Accept': 'audio/x-wav'}
@@ -317,28 +333,30 @@ class TTSThread:
         """停止TTS系统"""
         print("正在停止TTS系统...")
         
-        # 等待当前队列中的文本处理完成
-        if self.text_queue and not self.text_queue.empty():
-            print("等待当前文本处理完成...")
-            while not self.text_queue.empty() and self.running:
-                time.sleep(0.1)
-            
-        # 等待音频处理完成
-        if self.audio_player:
-            print("等待音频处理完成...")
-            self.audio_player.wait_for_cache_empty()
-            time.sleep(0.5)  # 额外等待一小段时间
-            
+        # 首先设置运行状态为False
         self.running = False
+        requests.get(f"{self.baseurl}/interrupt")
+        # 立即清空文本队列
+        while not self.text_queue.empty():
+            try:
+                self.text_queue.get_nowait()
+            except:
+                pass
+        
+        # 完全清理和重置音频播放器
+        if self.audio_player:
+            self.audio_player.clear()
         
         # 确保在停止前保存音频
         if self.save_wav and self.audio_player.saved_audio:
             print("停止前保存音频...")
             self._save_current_audio()
             
+        # 完全停止音频播放器
         if self.audio_player:
             self.audio_player.stop()
             
+        # 等待线程结束
         if self.audio_thread:
             self.audio_thread.join(timeout=1.0)
         if self.tts_thread:
