@@ -7,8 +7,9 @@ import win32con
 import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QHBoxLayout, QWidget, QFileDialog, QLabel, QComboBox,
-                           QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,
-                           QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox)
+                           QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,QListWidget,QListWidgetItem,
+                           QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox,
+                           QToolButton, QFrame, QScrollArea)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from OpenGL.GL import *
@@ -90,7 +91,7 @@ QComboBox QAbstractItemView {
     outline: 0px;
 }
 
-QGroupBox {
+CollapsibleGroupBox {
     border: 2px solid #4FB4FF;
     border-radius: 15px;
     margin-top: 10px;
@@ -99,7 +100,7 @@ QGroupBox {
     background-color: #FFFFFF;
 }
 
-QGroupBox::title {
+CollapsibleGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top center;
     padding: 0 10px;
@@ -137,6 +138,51 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     background: none;
 }
 """
+
+class CollapsibleGroupBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+        self.main_layout = QVBoxLayout(self)
+        
+        # Create a toggle button
+        self.toggle_button = QToolButton(text=title, checkable=True, checked=False)
+        self.toggle_button.setStyleSheet("QToolButton { border: none; }")
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+        self.toggle_button.clicked.connect(self.toggle)
+
+        # Create a scroll area for content
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        # Create a content area
+        self.content_area = QFrame()
+        self.content_area_layout = QVBoxLayout()
+        self.content_area.setLayout(self.content_area_layout)
+        
+        # Set content area as the widget of the scroll area
+        self.scroll_area.setWidget(self.content_area)
+        
+        # Initially hide the content area
+        self.content_area.setMaximumHeight(0)
+        self.content_area.setMinimumHeight(0)
+        self.content_area.setVisible(False)
+
+        # Add widgets to layout
+        self.main_layout.addWidget(self.toggle_button)
+        self.main_layout.addWidget(self.scroll_area)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.setSpacing(0)
+
+    def toggle(self):
+        checked = self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        self.content_area.setVisible(checked)
+        self.content_area.setMaximumHeight(self.content_area.sizeHint().height() if checked else 0)
+        self.content_area.setMinimumHeight(self.content_area.sizeHint().height() if checked else 0)
+        self.adjustSize()  # 调整窗口大小
+        self.parentWidget().adjustSize()  # 调整父窗口大小
+        self.parentWidget().parentWidget().adjustSize()  # 确保主窗口也调整大小
 
 class ControlPanel(QMainWindow):
     def __init__(self, live2d_window):
@@ -255,8 +301,8 @@ class ControlPanel(QMainWindow):
         model_layout = QVBoxLayout(model_tab)
         
         # 模型加载部分
-        model_group = QGroupBox("模型控制")
-        model_group_layout = QVBoxLayout()
+        model_group = CollapsibleGroupBox("模型控制")
+        model_group_layout = model_group.content_area_layout  # 使用 content_area_layout
         
         # 标准化模型按钮
         self.standardize_btn = QPushButton('标准化模型', self)
@@ -313,7 +359,6 @@ class ControlPanel(QMainWindow):
         self.play_random_expression_btn.setEnabled(False)
         model_group_layout.addWidget(self.play_random_expression_btn)
         
-        model_group.setLayout(model_group_layout)
         model_layout.addWidget(model_group)
         model_layout.addStretch()
         
@@ -322,8 +367,8 @@ class ControlPanel(QMainWindow):
         tracking_layout = QVBoxLayout(tracking_tab)
         
         # 视线跟踪控制组
-        tracking_group = QGroupBox("视线跟踪设置")
-        tracking_group_layout = QVBoxLayout()
+        tracking_group = CollapsibleGroupBox("视线跟踪设置")
+        tracking_group_layout = tracking_group.content_area_layout  # 使用 content_area_layout
         
         # 视线跟踪开关
         self.eye_tracking_btn = QPushButton('开启视线跟踪', self)
@@ -342,7 +387,6 @@ class ControlPanel(QMainWindow):
         tracking_group_layout.addWidget(QLabel("跟随强度:"))
         tracking_group_layout.addWidget(self.eye_tracking_strength_slider)
         
-        tracking_group.setLayout(tracking_group_layout)
         tracking_layout.addWidget(tracking_group)
         tracking_layout.addStretch()
         
@@ -351,8 +395,8 @@ class ControlPanel(QMainWindow):
         lipsync_layout = QVBoxLayout(lipsync_tab)
         
         # 口型同步控制组
-        lipsync_group = QGroupBox("口型同步设置")
-        lipsync_group_layout = QVBoxLayout()
+        lipsync_group = CollapsibleGroupBox("口型同步设置")
+        lipsync_group_layout = lipsync_group.content_area_layout  # 使用 content_area_layout
         
         # 音频设备选择
         self.audio_devices = QComboBox(self)
@@ -377,7 +421,6 @@ class ControlPanel(QMainWindow):
         lipsync_group_layout.addWidget(QLabel("同步强度:"))
         lipsync_group_layout.addWidget(self.lip_sync_strength)
         
-        lipsync_group.setLayout(lipsync_group_layout)
         lipsync_layout.addWidget(lipsync_group)
         lipsync_layout.addStretch()
         
@@ -386,8 +429,8 @@ class ControlPanel(QMainWindow):
         STT_layout = QVBoxLayout(STT_tab)
         
         # 语音识别设置组
-        STT_group = QGroupBox("语音识别设置")
-        STT_group_layout = QVBoxLayout()
+        STT_group = CollapsibleGroupBox("语音识别设置")
+        STT_group_layout = STT_group.content_area_layout  # 使用 content_area_layout
         
         # 麦克风选择
         STT_group_layout.addWidget(QLabel("选择麦克风:"))
@@ -437,15 +480,14 @@ class ControlPanel(QMainWindow):
         self.test_STT_result_label = QLabel()
         STT_group_layout.addWidget(self.test_STT_result_label)
 
-        STT_group.setLayout(STT_group_layout)
         STT_layout.addWidget(STT_group)
         STT_layout.addStretch()
         # === 语音生成选项卡 ===
         TTS_tab = QWidget()
         TTS_layout = QVBoxLayout(TTS_tab)
         
-        TTS_api_group = QGroupBox("API设置")
-        TTS_api_group_layout = QVBoxLayout()
+        TTS_api_group = CollapsibleGroupBox("API设置")
+        TTS_api_group_layout = TTS_api_group.content_area_layout  # 使用 content_area_layout
 
         # API文件选择
         api_file_layout = QHBoxLayout()
@@ -548,12 +590,11 @@ class ControlPanel(QMainWindow):
 
         TTS_api_group_layout.addLayout(api_control_layout)
 
-        TTS_api_group.setLayout(TTS_api_group_layout)
         TTS_layout.addWidget(TTS_api_group)
 
         # 推理设置组
-        TTS_infer_group = QGroupBox("推理设置")
-        TTS_infer_group_layout = QVBoxLayout()
+        TTS_infer_group = CollapsibleGroupBox("推理设置")
+        TTS_infer_group_layout = TTS_infer_group.content_area_layout  # 使用 content_area_layout
         
 
         # 参考音频路径
@@ -568,17 +609,20 @@ class ControlPanel(QMainWindow):
         ref_audio_layout.addWidget(ref_audio_btn)
         TTS_infer_group_layout.addLayout(ref_audio_layout)
         
-        # 辅助参考音频路径
-        aux_ref_layout = QHBoxLayout()
+        aux_ref_layout = QVBoxLayout()
         aux_ref_label = QLabel("辅助参考:")
-        self.aux_ref_list = QTextEdit()
-        self.aux_ref_list.setMaximumHeight(60)
-        self.aux_ref_list.setReadOnly(True)
-        aux_ref_btn = QPushButton("选择文件")
-        aux_ref_btn.clicked.connect(self.selectAuxRefAudio)
+        self.aux_ref_list = QListWidget()
+        self.aux_ref_list.setMaximumHeight(100)
+        aux_ref_btn_layout = QHBoxLayout()
+        select_btn = QPushButton("选择文件")
+        select_btn.clicked.connect(self.selectAuxRefAudio)
+        delete_btn = QPushButton("删除选中")
+        delete_btn.clicked.connect(self.deleteSelectedAuxRefAudio)
+        aux_ref_btn_layout.addWidget(select_btn)
+        aux_ref_btn_layout.addWidget(delete_btn)
         aux_ref_layout.addWidget(aux_ref_label)
         aux_ref_layout.addWidget(self.aux_ref_list)
-        aux_ref_layout.addWidget(aux_ref_btn)
+        aux_ref_layout.addLayout(aux_ref_btn_layout)
         TTS_infer_group_layout.addLayout(aux_ref_layout)
         
         # 语言选择
@@ -705,7 +749,7 @@ class ControlPanel(QMainWindow):
         self.test_tts_btn.clicked.connect(self.testTTS)
         TTS_infer_group_layout.addWidget(self.test_tts_btn)
         
-        TTS_infer_group.setLayout(TTS_infer_group_layout)
+        TTS_infer_group.content_area.setLayout(TTS_infer_group_layout)
         TTS_layout.addWidget(TTS_infer_group)
         TTS_layout.addStretch()
         
@@ -714,8 +758,8 @@ class ControlPanel(QMainWindow):
         chat_layout = QVBoxLayout(chat_tab)
         
         # 对话设置组
-        chat_group = QGroupBox("对话设置")
-        chat_group_layout = QVBoxLayout()
+        chat_group = CollapsibleGroupBox("对话设置")
+        chat_group_layout = chat_group.content_area_layout  # 使用 content_area_layout
         
         # 模型选择
         chat_group_layout.addWidget(QLabel("选择模型:"))
@@ -775,13 +819,12 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         self.voice_synthesis_btn.setEnabled(True)
         chat_group_layout.addWidget(self.voice_synthesis_btn)
 
-        chat_group.setLayout(chat_group_layout)
         chat_layout.addWidget(chat_group)
 
 
         # 聊天区域
-        chat_area = QGroupBox("聊天区域")
-        chat_area_layout = QVBoxLayout()
+        chat_area = CollapsibleGroupBox("聊天区域")
+        chat_area_layout = chat_area.content_area_layout
 
         # 聊天显示区域
         self.chat_display = QTextEdit()
@@ -815,7 +858,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         chat_area_layout.addWidget(self.chat_display)
         chat_area_layout.addLayout(input_layout)
 
-        chat_area.setLayout(chat_area_layout)
         chat_layout.addWidget(chat_area)
 
         chat_layout.addStretch()
@@ -824,26 +866,15 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         #保存配置
-        savesettings_group = QGroupBox("保存配置")
-        savesettings_group_layout = QVBoxLayout()
+        savesettings_group = CollapsibleGroupBox("保存配置")
+        savesettings_group_layout = savesettings_group.content_area_layout  # 使用 content_area_layout
         #添加保存配置按钮
         self.save_settings_btn = QPushButton("保存配置")
         self.save_settings_btn.clicked.connect(self.savesettings)
         savesettings_group_layout.addWidget(self.save_settings_btn)
-        savesettings_group.setLayout(savesettings_group_layout)
+        savesettings_group.content_area.setLayout(savesettings_group_layout)
         settings_layout.addWidget(savesettings_group)
         settings_layout.addStretch()
-
-        # #测试Agent功能
-        # testagentfunction_tab = QWidget()
-        # testagentfunction = QVBoxLayout(testagentfunction_tab)
-        # #随机播放音效按钮
-        # self.randomplayaudio_btn = QPushButton("随机播放音效")
-        # self.randomplayaudio_btn.clicked.connect(self.randomplayaudio)
-        # testagentfunction.addWidget(self.randomplayaudio_btn)
-
-        # #live2d窗口乱跑，躲避鼠标按钮
-        # self.escapemousewindow_btn = QPushButton("移动窗口")
 
         
         
@@ -859,6 +890,8 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         
         self.setStyleSheet(STYLE_SHEET)
+        self.setMinimumSize(500,500)
+        self.adjustSize()  # 确保初始化时调整窗口大小
 
     def loadModel(self):
         # 如果已经加载了模型，提示需要先卸载
@@ -1202,8 +1235,18 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         """选择辅助参考音频文件"""
         files, _ = QFileDialog.getOpenFileNames(self, "选择辅助参考音频文件", "", "音频文件 (*.wav *.mp3)")
         if files:
-            self.tts_settings["aux_ref_audio_paths"] = files
-            self.aux_ref_list.setText("\n".join(files))
+            self.tts_settings["aux_ref_audio_paths"].extend(files)
+            for file in files:
+                self.aux_ref_list.addItem(QListWidgetItem(file))
+
+    def deleteSelectedAuxRefAudio(self):
+        """删除选中的辅助参考音频文件"""
+        selected_items = self.aux_ref_list.selectedItems()
+        if not selected_items:
+            return
+        for item in selected_items:
+            self.tts_settings["aux_ref_audio_paths"].remove(item.text())
+            self.aux_ref_list.takeItem(self.aux_ref_list.row(item))
             
     def updateTTSSetting(self, key, value):
         """更新TTS设置"""
@@ -1229,7 +1272,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         test_settings["text"] = test_text
         
         # 直接创建TTSThread实例
-        self.test_tts = TTSThread(test_settings)
+        self.test_tts = TTSThread(baseurl=self.basettsurl,tts_settings=test_settings)
         print("开始测试语音合成")
         self.test_tts.start()
         
@@ -1339,7 +1382,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.show_subtitles_btn.setText("显示字幕")
             self.subtitle_window.hide()
             self.subtitle_visible = False
-
     def savesettings(self):
         """保存配置到 settings.json"""
         settings = {
@@ -1367,7 +1409,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 "prompt_lang": self.prompt_lang_combo.currentText(),
                 "prompt_text": self.prompt_text_input.toPlainText(),
                 "ref_audio_path": self.ref_audio_path.text(),
-                "aux_ref_audio_paths": self.tts_settings["aux_ref_audio_paths"],
+                "aux_ref_audio_paths": self.tts_settings["aux_ref_audio_paths"],  # 保存辅助参考音频路径
                 "top_k": self.topk_spin.value(),
                 "top_p": self.topp_spin.value(),
                 "temperature": self.temp_spin.value(),
@@ -1390,7 +1432,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             QMessageBox.information(self, "成功", "配置已保存！")
         except Exception as e:
             QMessageBox.warning(self, "错误", f"保存配置失败: {str(e)}")
-
     def loadsettings(self):
         """从 settings.json 加载配置"""
         try:
@@ -1422,8 +1463,12 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 self.prompt_lang_combo.setCurrentText(tts_settings.get("prompt_lang", "zh"))
                 self.prompt_text_input.setPlainText(tts_settings.get("prompt_text", ""))
                 self.ref_audio_path.setText(tts_settings.get("ref_audio_path", ""))
+                
+                # 加载辅助参考音频路径
                 self.tts_settings["aux_ref_audio_paths"] = tts_settings.get("aux_ref_audio_paths", [])
-                self.aux_ref_list.setText("\n".join(self.tts_settings["aux_ref_audio_paths"]))
+                self.aux_ref_list.clear()  # 清空当前列表
+                for path in self.tts_settings["aux_ref_audio_paths"]:
+                    self.aux_ref_list.addItem(QListWidgetItem(path))  # 将路径添加到 QListWidget
                 
                 self.topk_spin.setValue(tts_settings.get("top_k", 5))
                 self.topp_spin.setValue(tts_settings.get("top_p", 1.0))
