@@ -8,8 +8,7 @@ import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                            QHBoxLayout, QWidget, QFileDialog, QLabel, QComboBox,
                            QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,QListWidget,QListWidgetItem,
-                           QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox,
-                           QToolButton, QFrame, QScrollArea)
+                           QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from OpenGL.GL import *
@@ -91,7 +90,7 @@ QComboBox QAbstractItemView {
     outline: 0px;
 }
 
-CollapsibleGroupBox {
+QGroupBox {
     border: 2px solid #4FB4FF;
     border-radius: 15px;
     margin-top: 10px;
@@ -100,7 +99,7 @@ CollapsibleGroupBox {
     background-color: #FFFFFF;
 }
 
-CollapsibleGroupBox::title {
+QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top center;
     padding: 0 10px;
@@ -138,51 +137,6 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     background: none;
 }
 """
-
-class CollapsibleGroupBox(QWidget):
-    def __init__(self, title="", parent=None):
-        super().__init__(parent)
-        self.main_layout = QVBoxLayout(self)
-        
-        # Create a toggle button
-        self.toggle_button = QToolButton(text=title, checkable=True, checked=False)
-        self.toggle_button.setStyleSheet("QToolButton { border: none; }")
-        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
-        self.toggle_button.clicked.connect(self.toggle)
-
-        # Create a scroll area for content
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        
-        # Create a content area
-        self.content_area = QFrame()
-        self.content_area_layout = QVBoxLayout()
-        self.content_area.setLayout(self.content_area_layout)
-        
-        # Set content area as the widget of the scroll area
-        self.scroll_area.setWidget(self.content_area)
-        
-        # Initially hide the content area
-        self.content_area.setMaximumHeight(0)
-        self.content_area.setMinimumHeight(0)
-        self.content_area.setVisible(False)
-
-        # Add widgets to layout
-        self.main_layout.addWidget(self.toggle_button)
-        self.main_layout.addWidget(self.scroll_area)
-        self.main_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.setSpacing(0)
-
-    def toggle(self):
-        checked = self.toggle_button.isChecked()
-        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
-        self.content_area.setVisible(checked)
-        self.content_area.setMaximumHeight(self.content_area.sizeHint().height() if checked else 0)
-        self.content_area.setMinimumHeight(self.content_area.sizeHint().height() if checked else 0)
-        self.adjustSize()  # 调整窗口大小
-        self.parentWidget().adjustSize()  # 调整父窗口大小
-        self.parentWidget().parentWidget().adjustSize()  # 确保主窗口也调整大小
 
 class ControlPanel(QMainWindow):
     def __init__(self, live2d_window):
@@ -301,8 +255,8 @@ class ControlPanel(QMainWindow):
         model_layout = QVBoxLayout(model_tab)
         
         # 模型加载部分
-        model_group = CollapsibleGroupBox("模型控制")
-        model_group_layout = model_group.content_area_layout  # 使用 content_area_layout
+        model_group = QGroupBox("模型控制")
+        model_group_layout = QVBoxLayout()
         
         # 标准化模型按钮
         self.standardize_btn = QPushButton('标准化模型', self)
@@ -359,6 +313,7 @@ class ControlPanel(QMainWindow):
         self.play_random_expression_btn.setEnabled(False)
         model_group_layout.addWidget(self.play_random_expression_btn)
         
+        model_group.setLayout(model_group_layout)
         model_layout.addWidget(model_group)
         model_layout.addStretch()
         
@@ -367,8 +322,8 @@ class ControlPanel(QMainWindow):
         tracking_layout = QVBoxLayout(tracking_tab)
         
         # 视线跟踪控制组
-        tracking_group = CollapsibleGroupBox("视线跟踪设置")
-        tracking_group_layout = tracking_group.content_area_layout  # 使用 content_area_layout
+        tracking_group = QGroupBox("视线跟踪设置")
+        tracking_group_layout = QVBoxLayout()
         
         # 视线跟踪开关
         self.eye_tracking_btn = QPushButton('开启视线跟踪', self)
@@ -387,6 +342,7 @@ class ControlPanel(QMainWindow):
         tracking_group_layout.addWidget(QLabel("跟随强度:"))
         tracking_group_layout.addWidget(self.eye_tracking_strength_slider)
         
+        tracking_group.setLayout(tracking_group_layout)
         tracking_layout.addWidget(tracking_group)
         tracking_layout.addStretch()
         
@@ -395,8 +351,8 @@ class ControlPanel(QMainWindow):
         lipsync_layout = QVBoxLayout(lipsync_tab)
         
         # 口型同步控制组
-        lipsync_group = CollapsibleGroupBox("口型同步设置")
-        lipsync_group_layout = lipsync_group.content_area_layout  # 使用 content_area_layout
+        lipsync_group = QGroupBox("口型同步设置")
+        lipsync_group_layout = QVBoxLayout()
         
         # 音频设备选择
         self.audio_devices = QComboBox(self)
@@ -421,6 +377,7 @@ class ControlPanel(QMainWindow):
         lipsync_group_layout.addWidget(QLabel("同步强度:"))
         lipsync_group_layout.addWidget(self.lip_sync_strength)
         
+        lipsync_group.setLayout(lipsync_group_layout)
         lipsync_layout.addWidget(lipsync_group)
         lipsync_layout.addStretch()
         
@@ -429,8 +386,8 @@ class ControlPanel(QMainWindow):
         STT_layout = QVBoxLayout(STT_tab)
         
         # 语音识别设置组
-        STT_group = CollapsibleGroupBox("语音识别设置")
-        STT_group_layout = STT_group.content_area_layout  # 使用 content_area_layout
+        STT_group = QGroupBox("语音识别设置")
+        STT_group_layout = QVBoxLayout()
         
         # 麦克风选择
         STT_group_layout.addWidget(QLabel("选择麦克风:"))
@@ -480,14 +437,15 @@ class ControlPanel(QMainWindow):
         self.test_STT_result_label = QLabel()
         STT_group_layout.addWidget(self.test_STT_result_label)
 
+        STT_group.setLayout(STT_group_layout)
         STT_layout.addWidget(STT_group)
         STT_layout.addStretch()
         # === 语音生成选项卡 ===
         TTS_tab = QWidget()
         TTS_layout = QVBoxLayout(TTS_tab)
         
-        TTS_api_group = CollapsibleGroupBox("API设置")
-        TTS_api_group_layout = TTS_api_group.content_area_layout  # 使用 content_area_layout
+        TTS_api_group = QGroupBox("API设置")
+        TTS_api_group_layout = QVBoxLayout()
 
         # API文件选择
         api_file_layout = QHBoxLayout()
@@ -590,11 +548,12 @@ class ControlPanel(QMainWindow):
 
         TTS_api_group_layout.addLayout(api_control_layout)
 
+        TTS_api_group.setLayout(TTS_api_group_layout)
         TTS_layout.addWidget(TTS_api_group)
 
         # 推理设置组
-        TTS_infer_group = CollapsibleGroupBox("推理设置")
-        TTS_infer_group_layout = TTS_infer_group.content_area_layout  # 使用 content_area_layout
+        TTS_infer_group = QGroupBox("推理设置")
+        TTS_infer_group_layout = QVBoxLayout()
         
 
         # 参考音频路径
@@ -749,7 +708,7 @@ class ControlPanel(QMainWindow):
         self.test_tts_btn.clicked.connect(self.testTTS)
         TTS_infer_group_layout.addWidget(self.test_tts_btn)
         
-        TTS_infer_group.content_area.setLayout(TTS_infer_group_layout)
+        TTS_infer_group.setLayout(TTS_infer_group_layout)
         TTS_layout.addWidget(TTS_infer_group)
         TTS_layout.addStretch()
         
@@ -758,8 +717,8 @@ class ControlPanel(QMainWindow):
         chat_layout = QVBoxLayout(chat_tab)
         
         # 对话设置组
-        chat_group = CollapsibleGroupBox("对话设置")
-        chat_group_layout = chat_group.content_area_layout  # 使用 content_area_layout
+        chat_group = QGroupBox("对话设置")
+        chat_group_layout = QVBoxLayout()
         
         # 模型选择
         chat_group_layout.addWidget(QLabel("选择模型:"))
@@ -819,12 +778,13 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         self.voice_synthesis_btn.setEnabled(True)
         chat_group_layout.addWidget(self.voice_synthesis_btn)
 
+        chat_group.setLayout(chat_group_layout)
         chat_layout.addWidget(chat_group)
 
 
         # 聊天区域
-        chat_area = CollapsibleGroupBox("聊天区域")
-        chat_area_layout = chat_area.content_area_layout
+        chat_area = QGroupBox("聊天区域")
+        chat_area_layout = QVBoxLayout()
 
         # 聊天显示区域
         self.chat_display = QTextEdit()
@@ -858,6 +818,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         chat_area_layout.addWidget(self.chat_display)
         chat_area_layout.addLayout(input_layout)
 
+        chat_area.setLayout(chat_area_layout)
         chat_layout.addWidget(chat_area)
 
         chat_layout.addStretch()
@@ -866,15 +827,26 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
         #保存配置
-        savesettings_group = CollapsibleGroupBox("保存配置")
-        savesettings_group_layout = savesettings_group.content_area_layout  # 使用 content_area_layout
+        savesettings_group = QGroupBox("保存配置")
+        savesettings_group_layout = QVBoxLayout()
         #添加保存配置按钮
         self.save_settings_btn = QPushButton("保存配置")
         self.save_settings_btn.clicked.connect(self.savesettings)
         savesettings_group_layout.addWidget(self.save_settings_btn)
-        savesettings_group.content_area.setLayout(savesettings_group_layout)
+        savesettings_group.setLayout(savesettings_group_layout)
         settings_layout.addWidget(savesettings_group)
         settings_layout.addStretch()
+
+        # #测试Agent功能
+        # testagentfunction_tab = QWidget()
+        # testagentfunction = QVBoxLayout(testagentfunction_tab)
+        # #随机播放音效按钮
+        # self.randomplayaudio_btn = QPushButton("随机播放音效")
+        # self.randomplayaudio_btn.clicked.connect(self.randomplayaudio)
+        # testagentfunction.addWidget(self.randomplayaudio_btn)
+
+        # #live2d窗口乱跑，躲避鼠标按钮
+        # self.escapemousewindow_btn = QPushButton("移动窗口")
 
         
         
@@ -890,8 +862,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         
         self.setStyleSheet(STYLE_SHEET)
-        self.setMinimumSize(500,500)
-        self.adjustSize()  # 确保初始化时调整窗口大小
 
     def loadModel(self):
         # 如果已经加载了模型，提示需要先卸载
