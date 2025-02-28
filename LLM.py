@@ -84,7 +84,6 @@ class LLMThread(QThread):
                 current_segment += content
                 if self.tts_thread:
                     if chunk.choices[0].finish_reason == "stop":
-                        print("yessssssssssssssssssssssssssssssssssssssssssss")
                         self.tts_thread.add_text(current_segment)
                         current_segment = ""
                     if len(current_segment) < 8:
@@ -101,7 +100,18 @@ class LLMThread(QThread):
                         # 其他
                         '…', '...', '——','···'
                     ]'''
-                    if any(current_segment.endswith(p) for p in ',，。！？.!?~'):
+                    if any(current_segment.endswith(p) for p in [
+                        # 英文
+                        '.', '?', '!', ';', ':',
+                        # 中文
+                        '。', '？', '！', '；', '：',
+                        # 法语
+                        '»', '«',
+                        # 西班牙语
+                        '¿', '¡',
+                        # 其他
+                        '…', '...', '——','···'
+                    ]):
                         if first_sentence_in:
                             self.tts_thread.add_text("." + current_segment)
                             first_sentence_in = False

@@ -442,9 +442,10 @@ class ControlPanel(QMainWindow):
         STT_layout.addStretch()
         # === 语音生成选项卡 ===
         TTS_tab = QWidget()
-        TTS_layout = QVBoxLayout(TTS_tab)
+        TTS_layout = QHBoxLayout(TTS_tab)
         
         TTS_api_group = QGroupBox("API设置")
+        TTS_layout.addWidget(TTS_api_group, 1)
         TTS_api_group_layout = QVBoxLayout()
 
         # API文件选择
@@ -553,6 +554,7 @@ class ControlPanel(QMainWindow):
 
         # 推理设置组
         TTS_infer_group = QGroupBox("推理设置")
+        TTS_layout.addWidget(TTS_infer_group, 1)
         TTS_infer_group_layout = QVBoxLayout()
         
 
@@ -718,6 +720,7 @@ class ControlPanel(QMainWindow):
         
         # 对话设置组
         chat_group = QGroupBox("对话设置")
+        chat_layout.addWidget(chat_group, 1)
         chat_group_layout = QVBoxLayout()
         
         # 模型选择
@@ -784,6 +787,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         # 聊天区域
         chat_area = QGroupBox("聊天区域")
+        chat_layout.addWidget(chat_area, 1)
         chat_area_layout = QVBoxLayout()
 
         # 聊天显示区域
@@ -823,6 +827,16 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         chat_layout.addStretch()
 
+
+        #设置agent选项卡
+        agent_tab = QWidget()
+        agent_layout = QVBoxLayout(agent_tab)
+        working_label = QLabel("正在施工中！！！")
+
+        # 将 QLabel 添加到布局中
+        agent_layout.addWidget(working_label)
+        agent_tab.setLayout(agent_layout)
+
         #设置选项卡包括保存配置
         settings_tab = QWidget()
         settings_layout = QVBoxLayout(settings_tab)
@@ -837,16 +851,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         settings_layout.addWidget(savesettings_group)
         settings_layout.addStretch()
 
-        # #测试Agent功能
-        # testagentfunction_tab = QWidget()
-        # testagentfunction = QVBoxLayout(testagentfunction_tab)
-        # #随机播放音效按钮
-        # self.randomplayaudio_btn = QPushButton("随机播放音效")
-        # self.randomplayaudio_btn.clicked.connect(self.randomplayaudio)
-        # testagentfunction.addWidget(self.randomplayaudio_btn)
-
-        # #live2d窗口乱跑，躲避鼠标按钮
-        # self.escapemousewindow_btn = QPushButton("移动窗口")
 
         
         
@@ -858,6 +862,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         tab_widget.addTab(STT_tab, "语音识别")
         tab_widget.addTab(TTS_tab, "语音生成")
         tab_widget.addTab(chat_tab, "对话")
+        tab_widget.addTab(agent_tab,"Agent")
         tab_widget.addTab(settings_tab, "设置")
 
         
