@@ -5,3 +5,4 @@ PyQt6
 ollama
 openai
 RealtimeSTT>=0.1.6
+pywin32
