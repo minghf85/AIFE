@@ -199,10 +199,9 @@ class ControlPanel(QMainWindow):
             
     def updateAudioDevices(self):
         """更新音频设备列表"""
-        if not hasattr(self, 'audio_devices') or not hasattr(self, 'STT_audio_devices'):
+        if not hasattr(self, 'STT_audio_devices'):
             return
             
-        self.audio_devices.clear()
         self.STT_audio_devices.clear()
         if hasattr(self, 'TTS_audio_devices'):
             self.TTS_audio_devices.clear()
@@ -216,7 +215,6 @@ class ControlPanel(QMainWindow):
                     
                     # 为口型同步添加输入设备
                     if device_info['maxInputChannels'] > 0:
-                        self.audio_devices.addItem(device_name, i)
                         # 为语音识别添加设备（包含索引）
                         self.STT_audio_devices.addItem(f"{i}: {device_name}", i)
                         
@@ -343,12 +341,6 @@ class ControlPanel(QMainWindow):
         # 添加口型同步控制组到模型选项卡
         lipsync_group = QGroupBox("口型同步设置")
         lipsync_group_layout = QVBoxLayout()
-        
-        # 音频设备选择
-        self.audio_devices = QComboBox(self)
-        self.audio_devices.setEnabled(True)
-        lipsync_group_layout.addWidget(QLabel("选择音频设备:"))
-        lipsync_group_layout.addWidget(self.audio_devices)
         
         # 口型同步开关
         self.lip_sync_btn = QPushButton('开启口型同步')
@@ -878,7 +870,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                     self.expression_combo.setEnabled(True)
                     self.eye_tracking_btn.setEnabled(True)
                     self.eye_tracking_strength_slider.setEnabled(True)
-                    self.audio_devices.setEnabled(True)
                     self.lip_sync_btn.setEnabled(True)
                     self.lip_sync_strength.setEnabled(True)
                     self.play_random_motion_btn.setEnabled(True)
@@ -920,7 +911,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.expression_combo.setEnabled(False)
             self.eye_tracking_btn.setEnabled(False)
             self.eye_tracking_strength_slider.setEnabled(False)
-            self.audio_devices.setEnabled(False)
             self.lip_sync_btn.setEnabled(False)
             self.lip_sync_strength.setEnabled(False)
             self.play_random_motion_btn.setEnabled(False)
@@ -1042,11 +1032,12 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
     def toggleLipSync(self, checked):
         if checked:
-            device_index = self.audio_devices.currentData()
-            if device_index is not None:
-                self.live2d_window.live2d_widget.toggle_lip_sync(True, device_index)
-                self.lip_sync_btn.setText('关闭口型同步')
-                self.lip_sync_strength.setEnabled(True)
+            # 如果当前有TTS线程在运行，获取其AudioPlayer实例
+            if hasattr(self, 'test_tts') and self.test_tts:
+                self.live2d_window.live2d_widget.mic_lipsync.set_tts_player(self.test_tts.audio_player)
+            self.live2d_window.live2d_widget.toggle_lip_sync(True)
+            self.lip_sync_btn.setText('关闭口型同步')
+            self.lip_sync_strength.setEnabled(True)
         else:
             self.live2d_window.live2d_widget.toggle_lip_sync(False)
             self.lip_sync_btn.setText('开启口型同步')
@@ -1235,11 +1226,13 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         test_settings = self.tts_settings.copy()
         test_settings["text"] = test_text
         
-        # 直接创建TTSThread实例
+        # 创建TTSThread实例
         self.test_tts = TTSThread(baseurl=self.basettsurl,tts_settings=test_settings)
+        
+        # 如果口型同步已开启，更新TTS播放器
         print("开始测试语音合成")
         self.test_tts.start()
-        
+
     # 对话设置部分函数
     def toggleVoiceRecognition(self):
         if not self.STT_thread:
@@ -1297,6 +1290,8 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         # 创建并启动LLM线程
         tts_settings = self.tts_settings if self.voice_synthesis_enabled else None
         self.llm_thread = LLMThread(model, prompt, message, self.basettsurl, tts_settings)
+        if self.lip_sync_btn.isChecked():
+            self.live2d_window.live2d_widget.lip_sync.set_tts_player(self.llm_thread.tts_thread.audio_player)
         self.llm_thread.response_text_received.connect(self.handleResponse)
         self.llm_thread.response_started.connect(self.handleResponseStarted)
         # self.llm_thread.response_full_text_received.connect(self.handleFullResponse)

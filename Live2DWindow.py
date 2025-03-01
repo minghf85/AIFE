@@ -166,16 +166,6 @@ class TransparentOpenGLWidget(QOpenGLWidget):
             except Exception as e:
                 print(f"卸载模型时出错: {str(e)}")
                 
-    def toggle_lip_sync(self, enabled: bool, device_index: Optional[int] = None):
-        """切换口型同步状态"""
-        if enabled and not self.lip_sync_enabled:
-            if device_index is not None:
-                self.lip_sync.select_device(device_index)
-            self.lip_sync.start()
-            self.lip_sync_enabled = True
-        elif not enabled and self.lip_sync_enabled:
-            self.lip_sync.stop()
-            self.lip_sync_enabled = False
             
     def set_lip_sync_strength(self, value: float):
         """设置口型同步强度"""

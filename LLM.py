@@ -100,18 +100,7 @@ class LLMThread(QThread):
                         # 其他
                         '…', '...', '——','···'
                     ]'''
-                    if any(current_segment.endswith(p) for p in [
-                        # 英文
-                        '.', '?', '!', ';', ':',
-                        # 中文
-                        '。', '？', '！', '；', '：',
-                        # 法语
-                        '»', '«',
-                        # 西班牙语
-                        '¿', '¡',
-                        # 其他
-                        '…', '...', '——','···'
-                    ]):
+                    if any(current_segment.endswith(p) for p in ',.?!，。！？'):
                         if first_sentence_in:
                             self.tts_thread.add_text("." + current_segment)
                             first_sentence_in = False
