@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout
                            QHBoxLayout, QWidget, QFileDialog, QLabel, QComboBox,
                            QGroupBox,  QMessageBox, QSlider, QTabWidget,QSpinBox,QListWidget,QListWidgetItem,
                            QTextEdit, QPlainTextEdit, QLineEdit, QDoubleSpinBox, QGridLayout,QCheckBox)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 from OpenGL.GL import *
 from standardize import standardize_model
@@ -203,8 +203,6 @@ class ControlPanel(QMainWindow):
             return
             
         self.STT_audio_devices.clear()
-        if hasattr(self, 'TTS_audio_devices'):
-            self.TTS_audio_devices.clear()
         
         p = pa.PyAudio()
         try:
@@ -218,9 +216,7 @@ class ControlPanel(QMainWindow):
                         # 为语音识别添加设备（包含索引）
                         self.STT_audio_devices.addItem(f"{i}: {device_name}", i)
                         
-                    # 为TTS添加输出设备
-                    if device_info['maxOutputChannels'] > 0:
-                        self.TTS_audio_devices.addItem(f"{i}: {device_name}", i)
+                    
                 except Exception as e:
                     print(f"获取音频设备信息失败: {str(e)}")
         finally:
@@ -229,8 +225,6 @@ class ControlPanel(QMainWindow):
         # 如果有设备，默认选择第一个
         if self.STT_audio_devices.count() > 0:
             self.STT_audio_devices.setCurrentIndex(0)
-        if self.TTS_audio_devices.count() > 0:
-            self.TTS_audio_devices.setCurrentIndex(0)
             
     def initUI(self):
         """初始化UI"""
@@ -671,14 +665,6 @@ class ControlPanel(QMainWindow):
         stream_layout.addStretch()
         TTS_infer_group_layout.addLayout(stream_layout)
         
-        # 扬声器选择
-        audio_layout = QHBoxLayout()
-        audio_label = QLabel("输出设备:")
-        self.TTS_audio_devices = QComboBox()
-        self.TTS_audio_devices.setEnabled(True)
-        audio_layout.addWidget(audio_label)
-        audio_layout.addWidget(self.TTS_audio_devices)
-        TTS_infer_group_layout.addLayout(audio_layout)
 
         # 测试文本输入
         test_text_label = QLabel("测试文本:")
@@ -1348,7 +1334,14 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             "stt_settings": {
                 "language": self.STT_language_combo.currentText(),
                 "model": self.STT_model_combo.currentText(),
-                "wake_words": self.STT_wake_word_edit.toPlainText().strip()
+                "wake_words": self.STT_wake_word_edit.toPlainText().strip(),
+                "device_index": self.STT_audio_devices.currentData()  # 保存设备索引
+            },
+            
+            # 模型控制设置
+            "model_settings": {
+                "eye_tracking_strength": self.eye_tracking_strength_slider.value(),
+                "lip_sync_strength": self.lip_sync_strength.value()
             },
             
             # 推理api配置
@@ -1368,7 +1361,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                 "prompt_lang": self.prompt_lang_combo.currentText(),
                 "prompt_text": self.prompt_text_input.toPlainText(),
                 "ref_audio_path": self.ref_audio_path.text(),
-                "aux_ref_audio_paths": self.tts_settings["aux_ref_audio_paths"],  # 保存辅助参考音频路径
+                "aux_ref_audio_paths": self.tts_settings["aux_ref_audio_paths"],
                 "top_k": self.topk_spin.value(),
                 "top_p": self.topp_spin.value(),
                 "temperature": self.temp_spin.value(),
@@ -1394,16 +1387,40 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
     def loadsettings(self):
         """从 settings.json 加载配置"""
         try:
+            if not os.path.exists('settings.json'):
+                print("配置文件不存在，使用默认设置")
+                return
+                
             with open('settings.json', 'r', encoding='utf-8') as f:
                 settings = json.load(f)
                 
             # 加载语音识别设置
             stt_settings = settings.get("stt_settings", {})
             if stt_settings:
-                self.STT_language_combo.setCurrentText(stt_settings.get("language", "zh"))
-                self.STT_model_combo.setCurrentText(stt_settings.get("model", "large-v3"))
-                self.STT_wake_word_edit.setPlainText(stt_settings.get("wake_words", ""))
-                
+                try:
+                    self.STT_language_combo.setCurrentText(stt_settings.get("language", "zh"))
+                    self.STT_model_combo.setCurrentText(stt_settings.get("model", "large-v3"))
+                    self.STT_wake_word_edit.setPlainText(stt_settings.get("wake_words", ""))
+                    
+                    # 等待设备列表更新后再设置设备
+                    saved_device_index = stt_settings.get("device_index")
+                    if saved_device_index is not None:
+                        # 使用QTimer延迟设置设备，确保设备列表已更新
+                        QTimer.singleShot(100, lambda: self.setSTTDevice(saved_device_index))
+                except Exception as e:
+                    print(f"加载语音识别设置时出错: {e}")
+                    
+            # 加载模型控制设置
+            model_settings = settings.get("model_settings", {})
+            if model_settings:
+                try:
+                    self.eye_tracking_strength_slider.setValue(
+                        model_settings.get("eye_tracking_strength", 50))
+                    self.lip_sync_strength.setValue(
+                        model_settings.get("lip_sync_strength", 30))
+                except Exception as e:
+                    print(f"加载模型控制设置时出错: {e}")
+                    
             # 加载推理API设置
             api_settings = settings.get("api_settings", {})
             if api_settings:
@@ -1455,6 +1472,18 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             pass
         except Exception as e:
             QMessageBox.warning(self, "错误", f"加载配置失败: {str(e)}")
+
+    def setSTTDevice(self, device_index):
+        """设置语音识别设备"""
+        try:
+            # 查找设备索引对应的项
+            for i in range(self.STT_audio_devices.count()):
+                if self.STT_audio_devices.itemData(i) == device_index:
+                    self.STT_audio_devices.setCurrentIndex(i)
+                    return
+            print(f"未找到设备索引 {device_index}")
+        except Exception as e:
+            print(f"设置语音识别设备时出错: {e}")
 
     #api设置组
     def start_api(self):

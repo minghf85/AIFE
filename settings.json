@@ -2,7 +2,12 @@
     "stt_settings": {
         "language": "zh",
         "model": "base",
-        "wake_words": ""
+        "wake_words": "",
+        "device_index": 3
+    },
+    "model_settings": {
+        "eye_tracking_strength": 57,
+        "lip_sync_strength": 59
     },
     "api_settings": {
         "api_path": "H:/AIVtuber/GPT-SoVITS-v2-240821/GPT-SoVITS-v2-240821",
