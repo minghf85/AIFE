@@ -21,7 +21,6 @@ def main():
     try:
         live2d_window = Live2DWindow()
         control_panel = ControlPanel(live2d_window)
-        live2d_window.control_panel = control_panel
         control_panel.show()
         
         return app.exec()
