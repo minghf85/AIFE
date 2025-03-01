@@ -315,13 +315,8 @@ class ControlPanel(QMainWindow):
         
         model_group.setLayout(model_group_layout)
         model_layout.addWidget(model_group)
-        model_layout.addStretch()
         
-        # === 视线跟踪选项卡 ===
-        tracking_tab = QWidget()
-        tracking_layout = QVBoxLayout(tracking_tab)
-        
-        # 视线跟踪控制组
+        # 添加视线跟踪控制组到模型选项卡
         tracking_group = QGroupBox("视线跟踪设置")
         tracking_group_layout = QVBoxLayout()
         
@@ -343,14 +338,9 @@ class ControlPanel(QMainWindow):
         tracking_group_layout.addWidget(self.eye_tracking_strength_slider)
         
         tracking_group.setLayout(tracking_group_layout)
-        tracking_layout.addWidget(tracking_group)
-        tracking_layout.addStretch()
+        model_layout.addWidget(tracking_group)
         
-        # === 口型同步选项卡 ===
-        lipsync_tab = QWidget()
-        lipsync_layout = QVBoxLayout(lipsync_tab)
-        
-        # 口型同步控制组
+        # 添加口型同步控制组到模型选项卡
         lipsync_group = QGroupBox("口型同步设置")
         lipsync_group_layout = QVBoxLayout()
         
@@ -378,8 +368,9 @@ class ControlPanel(QMainWindow):
         lipsync_group_layout.addWidget(self.lip_sync_strength)
         
         lipsync_group.setLayout(lipsync_group_layout)
-        lipsync_layout.addWidget(lipsync_group)
-        lipsync_layout.addStretch()
+        model_layout.addWidget(lipsync_group)
+        
+        model_layout.addStretch()
         
         # === 语音识别选项卡 ===
         STT_tab = QWidget()
@@ -857,8 +848,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         # 添加选项卡
         tab_widget.addTab(model_tab, "模型")
-        tab_widget.addTab(tracking_tab, "视线")
-        tab_widget.addTab(lipsync_tab, "口型")
         tab_widget.addTab(STT_tab, "语音识别")
         tab_widget.addTab(TTS_tab, "语音生成")
         tab_widget.addTab(chat_tab, "对话")
