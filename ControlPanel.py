@@ -419,11 +419,94 @@ class ControlPanel(QMainWindow):
         STT_layout.addStretch()
         # === 语音生成选项卡 ===
         TTS_tab = QWidget()
-        TTS_layout = QHBoxLayout(TTS_tab)
         
-        TTS_api_group = QGroupBox("API设置")
-        TTS_layout.addWidget(TTS_api_group, 1)
-        TTS_api_group_layout = QVBoxLayout()
+        TTS_layout = QVBoxLayout(TTS_tab)
+        
+        # 创建上半部分布局（RealtimeTTS）
+        TTS_RealtimeTTS_layout = QHBoxLayout()
+        
+        # RealtimeTTS API设置组
+        TTS_RealtimeTTS_api_group = QGroupBox("RealtimeTTS API设置")
+        TTS_RealtimeTTS_api_group_layout = QVBoxLayout()
+        
+        # API服务器设置
+        server_layout = QGridLayout()
+        host_label = QLabel("服务器地址:")
+        self.realtime_host_input = QLineEdit("127.0.0.1")
+        port_label = QLabel("端口:")
+        self.realtime_port_input = QLineEdit("6880")
+
+        server_layout.addWidget(host_label, 0, 0)
+        server_layout.addWidget(self.realtime_host_input, 0, 1)
+        server_layout.addWidget(port_label, 0, 2)
+        server_layout.addWidget(self.realtime_port_input, 0, 3)
+
+        TTS_RealtimeTTS_api_group_layout.addLayout(server_layout)
+
+        # API控制按钮
+        api_control_layout = QHBoxLayout()
+        self.start_realtime_api_btn = QPushButton("启动API")
+        self.start_realtime_api_btn.clicked.connect(self.start_realtime_api)
+        self.restart_realtime_api_btn = QPushButton("重启API")
+        self.restart_realtime_api_btn.setEnabled(False)
+        self.restart_realtime_api_btn.clicked.connect(self.restart_realtime_api)
+        self.exit_realtime_api_btn = QPushButton("退出API")
+        self.exit_realtime_api_btn.setEnabled(False)
+        self.exit_realtime_api_btn.clicked.connect(self.exit_realtime_api)
+
+        api_control_layout.addWidget(self.start_realtime_api_btn)
+        api_control_layout.addWidget(self.restart_realtime_api_btn)
+        api_control_layout.addWidget(self.exit_realtime_api_btn)
+
+        TTS_RealtimeTTS_api_group_layout.addLayout(api_control_layout)
+
+        TTS_RealtimeTTS_api_group.setLayout(TTS_RealtimeTTS_api_group_layout)
+        TTS_RealtimeTTS_layout.addWidget(TTS_RealtimeTTS_api_group)
+
+        # RealtimeTTS推理设置组
+        TTS_RealtimeTTS_infer_group = QGroupBox("RealtimeTTS推理设置")
+        TTS_RealtimeTTS_infer_group_layout = QVBoxLayout()
+
+        # 引擎选择
+        engine_layout = QHBoxLayout()
+        engine_label = QLabel("选择引擎:")
+        self.realtime_engine_combo = QComboBox()
+        self.realtime_engine_combo.addItems(["kokoro", "edge", "azure", "elevenlabs", "system", "coqui", "openai"])
+        self.realtime_engine_combo.currentTextChanged.connect(self.update_realtime_voices)
+        engine_layout.addWidget(engine_label)
+        engine_layout.addWidget(self.realtime_engine_combo)
+        TTS_RealtimeTTS_infer_group_layout.addLayout(engine_layout)
+
+        # 声音选择
+        voice_layout = QHBoxLayout()
+        voice_label = QLabel("选择声音:")
+        self.realtime_voice_combo = QComboBox()
+        voice_layout.addWidget(voice_label)
+        voice_layout.addWidget(self.realtime_voice_combo)
+        TTS_RealtimeTTS_infer_group_layout.addLayout(voice_layout)
+
+        # 测试文本输入
+        test_text_label = QLabel("测试文本:")
+        self.realtime_test_text_input = QTextEdit()
+        self.realtime_test_text_input.setPlaceholderText("输入要合成的文本...")
+        self.realtime_test_text_input.setMaximumHeight(100)
+        TTS_RealtimeTTS_infer_group_layout.addWidget(test_text_label)
+        TTS_RealtimeTTS_infer_group_layout.addWidget(self.realtime_test_text_input)
+
+        # 测试按钮
+        self.test_realtime_tts_btn = QPushButton("测试语音合成")
+        self.test_realtime_tts_btn.clicked.connect(self.testRealtimeTTS)
+        TTS_RealtimeTTS_infer_group_layout.addWidget(self.test_realtime_tts_btn)
+
+        TTS_RealtimeTTS_infer_group.setLayout(TTS_RealtimeTTS_infer_group_layout)
+        TTS_RealtimeTTS_layout.addWidget(TTS_RealtimeTTS_infer_group)
+
+        # 创建下半部分布局（GSV）
+        TTS_GSV_layout = QHBoxLayout()
+        
+        # GSV API设置组
+        TTS_GSV_api_group = QGroupBox("GPT_SoVits API设置")
+        TTS_GSV_api_group_layout = QVBoxLayout()
 
         # API文件选择
         api_file_layout = QHBoxLayout()
@@ -435,8 +518,7 @@ class ControlPanel(QMainWindow):
         api_file_layout.addWidget(api_file_label)
         api_file_layout.addWidget(self.api_file_path)
         api_file_layout.addWidget(api_file_btn)
-        TTS_api_group_layout.addLayout(api_file_layout)
-
+        TTS_GSV_api_group_layout.addLayout(api_file_layout)
 
         # GPT和SoVITS权重设置
         weights_layout = QGridLayout()
@@ -493,7 +575,7 @@ class ControlPanel(QMainWindow):
         weights_layout.addWidget(self.cnhubert_weights_path, 3, 1)
         weights_layout.addWidget(cnhubert_btn, 3, 2)
 
-        TTS_api_group_layout.addLayout(weights_layout)
+        TTS_GSV_api_group_layout.addLayout(weights_layout)
 
         # API服务器设置
         server_layout = QGridLayout()
@@ -507,7 +589,7 @@ class ControlPanel(QMainWindow):
         server_layout.addWidget(port_label, 0, 2)
         server_layout.addWidget(self.port_input, 0, 3)
 
-        TTS_api_group_layout.addLayout(server_layout)
+        TTS_GSV_api_group_layout.addLayout(server_layout)
 
         # API控制按钮
         api_control_layout = QHBoxLayout()
@@ -524,16 +606,14 @@ class ControlPanel(QMainWindow):
         api_control_layout.addWidget(self.restart_api_btn)
         api_control_layout.addWidget(self.exit_api_btn)
 
-        TTS_api_group_layout.addLayout(api_control_layout)
+        TTS_GSV_api_group_layout.addLayout(api_control_layout)
 
-        TTS_api_group.setLayout(TTS_api_group_layout)
-        TTS_layout.addWidget(TTS_api_group)
+        TTS_GSV_api_group.setLayout(TTS_GSV_api_group_layout)
+        TTS_GSV_layout.addWidget(TTS_GSV_api_group)
 
-        # 推理设置组
-        TTS_infer_group = QGroupBox("推理设置")
-        TTS_layout.addWidget(TTS_infer_group, 1)
-        TTS_infer_group_layout = QVBoxLayout()
-        
+        # GSV推理设置组
+        TTS_GSV_infer_group = QGroupBox("GPT_SoVits推理设置")
+        TTS_GSV_infer_group_layout = QVBoxLayout()
 
         # 参考音频路径
         ref_audio_layout = QHBoxLayout()
@@ -545,7 +625,7 @@ class ControlPanel(QMainWindow):
         ref_audio_layout.addWidget(ref_audio_label)
         ref_audio_layout.addWidget(self.ref_audio_path)
         ref_audio_layout.addWidget(ref_audio_btn)
-        TTS_infer_group_layout.addLayout(ref_audio_layout)
+        TTS_GSV_infer_group_layout.addLayout(ref_audio_layout)
         
         aux_ref_layout = QVBoxLayout()
         aux_ref_label = QLabel("辅助参考:")
@@ -561,7 +641,7 @@ class ControlPanel(QMainWindow):
         aux_ref_layout.addWidget(aux_ref_label)
         aux_ref_layout.addWidget(self.aux_ref_list)
         aux_ref_layout.addLayout(aux_ref_btn_layout)
-        TTS_infer_group_layout.addLayout(aux_ref_layout)
+        TTS_GSV_infer_group_layout.addLayout(aux_ref_layout)
         
         # 语言选择
         lang_layout = QGridLayout()
@@ -582,7 +662,7 @@ class ControlPanel(QMainWindow):
         self.prompt_lang_combo.currentTextChanged.connect(lambda x: self.updateTTSSetting("prompt_lang", x))
         lang_layout.addWidget(prompt_lang_label, 0, 2)
         lang_layout.addWidget(self.prompt_lang_combo, 0, 3)
-        TTS_infer_group_layout.addLayout(lang_layout)
+        TTS_GSV_infer_group_layout.addLayout(lang_layout)
         
         # 提示文本
         prompt_text_label = QLabel("提示文本:")
@@ -591,8 +671,8 @@ class ControlPanel(QMainWindow):
         self.prompt_text_input.setText("呵哼哼，想要拿到它的话，就先加油追上我吧。")
         self.prompt_text_input.setMaximumHeight(60)
         self.prompt_text_input.textChanged.connect(lambda: self.updateTTSSetting("prompt_text", self.prompt_text_input.toPlainText()))
-        TTS_infer_group_layout.addWidget(prompt_text_label)
-        TTS_infer_group_layout.addWidget(self.prompt_text_input)
+        TTS_GSV_infer_group_layout.addWidget(prompt_text_label)
+        TTS_GSV_infer_group_layout.addWidget(self.prompt_text_input)
         
         # 语音生成参数
         params_layout = QGridLayout()
@@ -654,7 +734,7 @@ class ControlPanel(QMainWindow):
         params_layout.addWidget(split_label, 2, 2)
         params_layout.addWidget(self.split_combo, 2, 3)
         
-        TTS_infer_group_layout.addLayout(params_layout)
+        TTS_GSV_infer_group_layout.addLayout(params_layout)
         
         # Streaming Mode
         stream_layout = QHBoxLayout()
@@ -663,24 +743,27 @@ class ControlPanel(QMainWindow):
         self.stream_checkbox.stateChanged.connect(lambda x: self.updateTTSSetting("streaming_mode", bool(x)))
         stream_layout.addWidget(self.stream_checkbox)
         stream_layout.addStretch()
-        TTS_infer_group_layout.addLayout(stream_layout)
-        
+        TTS_GSV_infer_group_layout.addLayout(stream_layout)
 
         # 测试文本输入
         test_text_label = QLabel("测试文本:")
         self.test_text_input = QTextEdit()
         self.test_text_input.setPlaceholderText("输入要合成的文本...")
         self.test_text_input.setMaximumHeight(100)
-        TTS_infer_group_layout.addWidget(test_text_label)
-        TTS_infer_group_layout.addWidget(self.test_text_input)
+        TTS_GSV_infer_group_layout.addWidget(test_text_label)
+        TTS_GSV_infer_group_layout.addWidget(self.test_text_input)
         
         # 测试按钮
         self.test_tts_btn = QPushButton("测试语音合成")
         self.test_tts_btn.clicked.connect(self.testTTS)
-        TTS_infer_group_layout.addWidget(self.test_tts_btn)
+        TTS_GSV_infer_group_layout.addWidget(self.test_tts_btn)
         
-        TTS_infer_group.setLayout(TTS_infer_group_layout)
-        TTS_layout.addWidget(TTS_infer_group)
+        TTS_GSV_infer_group.setLayout(TTS_GSV_infer_group_layout)
+        TTS_GSV_layout.addWidget(TTS_GSV_infer_group)
+
+        # 添加布局到主布局
+        TTS_layout.addLayout(TTS_RealtimeTTS_layout)
+        TTS_layout.addLayout(TTS_GSV_layout)
         TTS_layout.addStretch()
         
         # === 对话选项卡 ===
@@ -749,6 +832,16 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         self.voice_synthesis_btn.clicked.connect(self.toggleVoiceSynthesis)
         self.voice_synthesis_btn.setEnabled(True)
         chat_group_layout.addWidget(self.voice_synthesis_btn)
+
+        # 添加TTS模式选择
+        tts_mode_layout = QHBoxLayout()
+        tts_mode_label = QLabel("TTS模式:")
+        self.tts_mode_combo = QComboBox()
+        self.tts_mode_combo.addItems(["GSV", "RealtimeTTS"])
+        self.tts_mode_combo.currentTextChanged.connect(self.onTTSTypeChanged)
+        tts_mode_layout.addWidget(tts_mode_label)
+        tts_mode_layout.addWidget(self.tts_mode_combo)
+        chat_group_layout.addLayout(tts_mode_layout)
 
         chat_group.setLayout(chat_group_layout)
         chat_layout.addWidget(chat_group)
@@ -965,7 +1058,6 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         else:
             self.play_random_motion_btn.setText("开启播放随机动作")
             self.live2d_window.live2d_widget.motion_timer.stop()
-            self.live2d_window.live2d_widget.model.ResetPose()
 
     def playMotion(self):
         """播放动作"""
@@ -1000,6 +1092,7 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         else:
             self.play_random_expression_btn.setText("开启播放随机表情")
             self.live2d_window.live2d_widget.expression_timer.stop()
+            self.live2d_window.live2d_widget.model.ResetExpression()
 
     def changeExpression(self, expression):
         if self.live2d_window.live2d_widget.model:
@@ -1240,9 +1333,30 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             self.voice_synthesis_btn.setText("开启语音合成")
             self.voice_synthesis_enabled = False
 
+    def onTTSTypeChanged(self, mode):
+        """TTS模式改变时的处理"""
+        if mode == "RealtimeTTS":
+            # 启用RealtimeTTS相关设置
+            self.realtime_engine_combo.setEnabled(True)
+            self.realtime_voice_combo.setEnabled(True)
+            # 禁用GSV相关设置
+            self.text_lang_combo.setEnabled(False)
+            self.prompt_lang_combo.setEnabled(False)
+            self.prompt_text_input.setEnabled(False)
+            self.ref_audio_path.setEnabled(False)
+            self.aux_ref_list.setEnabled(False)
+        else:
+            # 启用GSV相关设置
+            self.text_lang_combo.setEnabled(True)
+            self.prompt_lang_combo.setEnabled(True)
+            self.prompt_text_input.setEnabled(True)
+            self.ref_audio_path.setEnabled(True)
+            self.aux_ref_list.setEnabled(True)
+            # 禁用RealtimeTTS相关设置
+            self.realtime_engine_combo.setEnabled(False)
+            self.realtime_voice_combo.setEnabled(False)
+
     def sendMessage(self, message=None):
-        
-        
         if self.STT_thread and self.STT_thread.is_testing:
             return
         
@@ -1275,12 +1389,20 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
         
         # 创建并启动LLM线程
         tts_settings = self.tts_settings if self.voice_synthesis_enabled else None
-        self.llm_thread = LLMThread(model, prompt, message, self.basettsurl, tts_settings)
+        tts_mode = ""
+        if tts_settings:
+            # 根据选择的TTS模式设置参数
+            tts_mode = "realtime" if self.tts_mode_combo.currentText() == "RealtimeTTS" else "gsv"
+            if tts_mode == "realtime":
+                tts_settings.update({
+                    "engine": self.realtime_engine_combo.currentText(),
+                    "voice": self.realtime_voice_combo.currentText()
+                })
+        self.llm_thread = LLMThread(model, prompt, message, self.basettsurl, tts_settings, tts_mode)
         if self.lip_sync_btn.isChecked():
             self.live2d_window.live2d_widget.lip_sync.set_tts_player(self.llm_thread.tts_thread.audio_player)
         self.llm_thread.response_text_received.connect(self.handleResponse)
         self.llm_thread.response_started.connect(self.handleResponseStarted)
-        # self.llm_thread.response_full_text_received.connect(self.handleFullResponse)
         self.llm_thread.start()
 
     def onInputEditClicked(self):
@@ -1342,6 +1464,14 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
             "model_settings": {
                 "eye_tracking_strength": self.eye_tracking_strength_slider.value(),
                 "lip_sync_strength": self.lip_sync_strength.value()
+            },
+            
+            # RealtimeTTS API配置
+            "realtime_tts_settings": {
+                "host": self.realtime_host_input.text(),
+                "port": self.realtime_port_input.text(),
+                "engine": self.realtime_engine_combo.currentText(),
+                "voice": self.realtime_voice_combo.currentText()
             },
             
             # 推理api配置
@@ -1420,6 +1550,16 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
                         model_settings.get("lip_sync_strength", 30))
                 except Exception as e:
                     print(f"加载模型控制设置时出错: {e}")
+                    
+            # 加载RealtimeTTS设置
+            realtime_tts_settings = settings.get("realtime_tts_settings", {})
+            if realtime_tts_settings:
+                self.realtime_host_input.setText(realtime_tts_settings.get("host", "127.0.0.1"))
+                self.realtime_port_input.setText(realtime_tts_settings.get("port", "6880"))
+                self.realtime_engine_combo.setCurrentText(realtime_tts_settings.get("engine", "kokoro"))
+                # 等待引擎选择后再设置声音
+                QTimer.singleShot(100, lambda: self.realtime_voice_combo.setCurrentText(
+                    realtime_tts_settings.get("voice", "")))
                     
             # 加载推理API设置
             api_settings = settings.get("api_settings", {})
@@ -1765,6 +1905,143 @@ AI感：偶尔说出奇怪的话，比如思考ai与人类的关系与未来，�
 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"选择CNHubert模型目录时出错: {str(e)}")
+
+    def start_realtime_api(self):
+        """启动RealtimeTTS API服务"""
+        try:
+            # 获取当前环境的 Python 路径
+            python_path = os.path.join(os.getcwd(), ".conda", "python.exe")
+            if not os.path.exists(python_path):
+                QMessageBox.warning(self, "错误", "找不到 Python 可执行文件")
+                return
+                
+            # 构建启动命令
+            cmd = [
+                python_path,
+                "tts_server.py",
+                "-p", self.realtime_port_input.text()
+            ]
+            
+            # 在Windows中使用新的cmd窗口运行命令
+            startup_info = subprocess.STARTUPINFO()
+            startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup_info.wShowWindow = win32con.SW_NORMAL
+
+            self.realtime_api_process = subprocess.Popen(
+                f'start cmd /k {" ".join(cmd)}',
+                shell=True,
+                startupinfo=startup_info
+            )
+
+            print("RealtimeTTS API服务已启动")
+            # 启用相关按钮
+            self.restart_realtime_api_btn.setEnabled(True)
+            self.exit_realtime_api_btn.setEnabled(True)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"启动API服务失败: {str(e)}")
+
+    def restart_realtime_api(self):
+        """重启RealtimeTTS API服务"""
+        try:
+            # 先尝试通过API重启
+            try:
+                response = requests.get(
+                    f"http://{self.realtime_host_input.text()}:{self.realtime_port_input.text()}/control",
+                    params={"command": "restart"}
+                )
+                if response.status_code == 200:
+                    print("RealtimeTTS API服务重启命令已发送")
+                    return
+            except:
+                pass
+            
+            # 如果API重启失败，则强制重启
+            self.exit_realtime_api()
+            time.sleep(1)
+            self.start_realtime_api()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"重启API服务失败: {str(e)}")
+
+    def exit_realtime_api(self):
+        """退出RealtimeTTS API服务"""
+        try:
+            # 先尝试通过API退出
+            try:
+                requests.get(
+                    f"http://{self.realtime_host_input.text()}:{self.realtime_port_input.text()}/control",
+                    params={"command": "exit"}
+                )
+            except:
+                pass
+            
+            # 强制终止进程
+            if hasattr(self, 'realtime_api_process'):
+                self.realtime_api_process.terminate()
+                self.realtime_api_process.wait()
+                print("RealtimeTTS API服务已关闭")
+            
+            # 禁用相关按钮
+            self.restart_realtime_api_btn.setEnabled(False)
+            self.exit_realtime_api_btn.setEnabled(False)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"关闭API服务失败: {str(e)}")
+
+    def testRealtimeTTS(self):
+        """测试RealtimeTTS语音合成"""
+        test_text = self.realtime_test_text_input.toPlainText()
+        if not test_text:
+            QMessageBox.warning(self, "警告", "请输入要合成的文本")
+            return
+            
+        try:
+            # 停止之前的TTS实例
+            if hasattr(self, 'test_tts') and self.test_tts:
+                self.test_tts.stop()
+                
+            # 创建测试设置
+            test_settings = {
+                "text": test_text,
+                "engine": self.realtime_engine_combo.currentText(),
+                "voice": self.realtime_voice_combo.currentText()
+            }
+            
+            # 创建TTSThread实例
+            self.test_tts = TTSThread(
+                baseurl=f"http://{self.realtime_host_input.text()}:{self.realtime_port_input.text()}",
+                tts_settings=test_settings,
+                tts_mode="realtime"
+            )
+            
+            # 如果口型同步已开启，更新TTS播放器
+            if self.lip_sync_btn.isChecked():
+                self.live2d_window.live2d_widget.lip_sync.set_tts_player(self.test_tts.audio_player)
+                
+            print("开始测试语音合成")
+            self.test_tts.start()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"测试语音合成失败: {str(e)}")
+
+    def update_realtime_voices(self):
+        """更新RealtimeTTS声音列表"""
+        try:
+            engine = self.realtime_engine_combo.currentText()
+            url = f"http://{self.realtime_host_input.text()}:{self.realtime_port_input.text()}/voices"
+            params = {"engine": engine}
+            
+            response = requests.get(url, params=params)
+            if response.status_code == 200:
+                voices = response.json()
+                self.realtime_voice_combo.clear()
+                self.realtime_voice_combo.addItems(voices)
+            else:
+                print(f"获取声音列表失败: {response.text}")
+                
+        except Exception as e:
+            print(f"更新声音列表失败: {str(e)}")
 
 #透明字幕
 class SubtitleWindow(QWidget):

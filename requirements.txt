@@ -4,5 +4,6 @@ PyAudio>=0.2.13
 PyQt6
 ollama
 openai
-RealtimeSTT>=0.1.6
+RealtimeSTT
 pywin32
+RealtimeTTS

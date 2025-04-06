@@ -6,3 +6,6 @@
 /testagentfunction.py
 /agents
 /realtimesst.log
+/models
+*.pyc
+testkokoro.py

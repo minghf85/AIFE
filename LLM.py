@@ -10,14 +10,16 @@ class LLMThread(QThread):
     response_started = pyqtSignal()
     response_finished = pyqtSignal()
 
-    def __init__(self, model, prompt, message,basettsurl, tts_settings=None):
+    def __init__(self, model, prompt, message, baseurl, tts_settings=None, tts_mode="gsv"):
         super().__init__()
         self.model = model
         self.prompt = prompt
         self.message = message
+        self.baseurl = baseurl
         self.tts_settings = tts_settings
-        self.basettsurl = basettsurl
-        self.tts_thread = TTSThread(baseurl=self.basettsurl,tts_settings=self.tts_settings) if self.tts_settings else None
+        self.tts_mode = tts_mode
+        self.tts_thread = None
+        self.running = True
         self.history_messages = []
         self.interrupted = False
         self.current_response = ""
@@ -26,6 +28,7 @@ class LLMThread(QThread):
         """打断当前生成"""
             
         self.interrupted = True
+        self.running = False
         if self.tts_thread:
             self.tts_thread.stop()
         
@@ -41,9 +44,18 @@ class LLMThread(QThread):
             self.interrupted = False
             self.current_response = ""
             
-            if self.tts_thread:
+            self.response_started.emit()
+            
+            # 创建TTS线程（如果需要）
+            if self.tts_settings:
+                self.tts_thread = TTSThread(
+                    baseurl=self.baseurl,
+                    tts_settings=self.tts_settings,
+                    stream=None,
+                    tts_mode=self.tts_mode
+                )
                 self.tts_thread.start()
-                
+            
             # 初始化或更新历史消息
             if not self.history_messages:   
                 self.history_messages = [
@@ -70,7 +82,6 @@ class LLMThread(QThread):
             
             current_segment = ""
             first_sentence_in = True
-            self.response_started.emit()
             
             for chunk in response:
                 if self.interrupted:
@@ -114,6 +125,11 @@ class LLMThread(QThread):
                     'role': 'assistant',
                     'content': self.current_response
                 })
+            
+            # 等待TTS处理完成
+            if self.tts_thread:
+                self.tts_thread.wait_for_cache_empty()
+                self.tts_thread.stop()
             
             self.response_finished.emit()
             

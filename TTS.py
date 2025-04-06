@@ -28,6 +28,7 @@ class AudioPlayer:
         self.total_played = 0
         self.saved_audio = bytearray()  # 用于保存音频数据
         self.save_audio = False  # 是否保存音频数据的标志
+        self.is_realtime_tts = False  # 是否是 RealtimeTTS 模式
         
     def setup_stream(self):
         try:
@@ -38,7 +39,7 @@ class AudioPlayer:
             self.stream = self.p.open(
                 format=self.p.get_format_from_width(2),
                 channels=1,
-                rate=32000,
+                rate=24000 if self.is_realtime_tts else 32000,  # RealtimeTTS 使用 24000Hz
                 output=True,
                 output_device_index=self.play_device
             )
@@ -47,6 +48,19 @@ class AudioPlayer:
             
     def add_audio_data(self, audio_data):
         with self.cache_lock:
+            if self.is_realtime_tts:
+                # 如果是 RealtimeTTS 模式，检查是否需要添加 WAV 头
+                if not audio_data.startswith(b'RIFF'):
+                    # 创建 WAV 文件头
+                    wav_header = io.BytesIO()
+                    with wave.open(wav_header, 'wb') as wav_file:
+                        wav_file.setnchannels(1)  # 单声道
+                        wav_file.setsampwidth(2)  # 16位采样
+                        wav_file.setframerate(24000)  # RealtimeTTS 采样率
+                        wav_file.setnframes(0)  # 帧数将在写入数据时自动计算
+                    wav_header.seek(0)
+                    audio_data = wav_header.read() + audio_data
+                    
             self.audio_cache.append(audio_data)
             if self.save_audio:
                 self.saved_audio.extend(audio_data)
@@ -70,6 +84,9 @@ class AudioPlayer:
                     audio_data = self.audio_cache.popleft()
                 
                 if audio_data:
+                    # 如果是 RealtimeTTS 模式，跳过 WAV 头
+                    if self.is_realtime_tts and audio_data.startswith(b'RIFF'):
+                        audio_data = audio_data[44:]
                     self.stream.write(audio_data)
                     self.is_playing = True
                     self.last_play_time = time.time()
@@ -114,15 +131,22 @@ class AudioPlayer:
                 print(f"重置音频流时出错: {e}")
         self.is_playing = False
         self.cache_event.clear()
+        
+    def set_realtime_tts_mode(self, is_realtime):
+        """设置是否为 RealtimeTTS 模式"""
+        self.is_realtime_tts = is_realtime
+        # 重新设置音频流以使用正确的采样率
+        self.setup_stream()
 
 class TTSThread:
-    def __init__(self, baseurl,tts_settings, stream=None, play_device=None, save_wav=False):
+    def __init__(self, baseurl, tts_settings, stream=None, play_device=None, save_wav=False, tts_mode="gsv"):
         """
         初始化实时TTS系统
         :param tts_settings: TTS设置，包含所有必要的参数
         :param stream: 文本流，用于实时生成文本
         :param play_device: 播放设备索引，默认为None使用系统默认设备
         :param save_wav: 是否保存音频文件
+        :param tts_mode: TTS模式，可选 "gsv" 或 "realtime"
         """
         self.baseurl = baseurl
         self.tts_settings = tts_settings
@@ -133,12 +157,15 @@ class TTSThread:
         self.audio_thread = None
         self.tts_thread = None
         self.stream_thread = None
+        self.tts_mode = tts_mode  # 添加TTS模式
+        # 设置 RealtimeTTS 模式
+        self.audio_player.set_realtime_tts_mode(tts_mode == "realtime")
         # 检查是否有初始文本需要处理
         self.initial_text = self.tts_settings.get("text")
         self.full_text = self.initial_text
         self.content = ""
         self.save_wav = save_wav
-        self.text_ready = threading.Event()  # 添加事件标志
+        self.text_ready = threading.Event()
         
         # 如果需要保存音频，创建保存目录
         if self.save_wav:
@@ -199,39 +226,95 @@ class TTSThread:
             # 设置要合成的文本
             self.tts_settings["text"] = text
             
-            # 发送请求
-            response = requests.post(
-                f"{self.baseurl}/tts",
-                json=self.tts_settings,
-                stream=True,
-                headers={'Accept': 'audio/x-wav'}
-            )
-            
-            if response.status_code == 200:
-                first_chunk = True
-                for chunk in response.iter_content(chunk_size=1024):
-                    if not self.running:
-                        break
-                        
-                    if chunk:
-                        if first_chunk and chunk.startswith(b'RIFF'):
-                            chunk = chunk[44:]
-                            first_chunk = False
-                        
-                        if len(chunk) > 0:
-                            if self.save_wav:
-                                self.audio_player.save_audio = True
-                            self.audio_player.add_audio_data(chunk)
-                            
-                print(f"文本合成完成: {text}")
+            if self.tts_mode == "realtime":
+                # RealtimeTTS 模式
+                # 首先设置引擎
+                engine_url = f"{self.baseurl}/set_engine"
+                print(engine_url)
+                engine_params = {
+                    "engine_name": self.tts_settings.get("engine", "kokoro")
+                }
+                print(engine_params)
+                engine_response = requests.get(engine_url, params=engine_params)
+                if engine_response.status_code != 200:
+                    print(f"设置引擎失败: {engine_response.text}")
+                    return
                 
-                # 如果不是流式输入，保存当前音频
-                if not self.stream and self.save_wav:
-                    print("保存音频...")
-                    self._save_current_audio()
+                # 然后设置声音
+                voice_url = f"{self.baseurl}/setvoice"
+                voice_params = {
+                    "voice_name": self.tts_settings.get("voice", "")
+                }
+                voice_response = requests.get(voice_url, params=voice_params)
+                if voice_response.status_code != 200:
+                    print(f"设置声音失败: {voice_response.text}")
+                    return
+                
+                # 使用与 GSV 相同的请求方式
+                url = f"{self.baseurl}/tts"
+                params = {
+                    "text": text
+                }
+                response = requests.get(url, params=params, stream=True)
+                
+                if response.status_code == 200:
+                    first_chunk = True
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if not self.running:
+                            break
+                            
+                        if chunk:
+                            if first_chunk and chunk.startswith(b'RIFF'):
+                                chunk = chunk[44:]
+                                first_chunk = False
+                            
+                            if len(chunk) > 0:
+                                if self.save_wav:
+                                    self.audio_player.save_audio = True
+                                self.audio_player.add_audio_data(chunk)
+                                
+                    print(f"文本合成完成: {text}")
                     
+                    # 如果不是流式输入，保存当前音频
+                    if not self.stream and self.save_wav:
+                        print("保存音频...")
+                        self._save_current_audio()
+                else:
+                    print(f"语音合成失败: {response.text}")
             else:
-                print(f"语音合成失败: {response.text}")
+                # GSV 模式
+                url = f"{self.baseurl}/tts"
+                response = requests.post(
+                    url,
+                    json=self.tts_settings,
+                    stream=True,
+                    headers={'Accept': 'audio/x-wav'}
+                )
+                
+                if response.status_code == 200:
+                    first_chunk = True
+                    for chunk in response.iter_content(chunk_size=1024):
+                        if not self.running:
+                            break
+                            
+                        if chunk:
+                            if first_chunk and chunk.startswith(b'RIFF'):
+                                chunk = chunk[44:]
+                                first_chunk = False
+                            
+                            if len(chunk) > 0:
+                                if self.save_wav:
+                                    self.audio_player.save_audio = True
+                                self.audio_player.add_audio_data(chunk)
+                                
+                    print(f"文本合成完成: {text}")
+                    
+                    # 如果不是流式输入，保存当前音频
+                    if not self.stream and self.save_wav:
+                        print("保存音频...")
+                        self._save_current_audio()
+                else:
+                    print(f"语音合成失败: {response.text}")
                 
             # 恢复原始文本设置
             self.tts_settings["text"] = original_text
