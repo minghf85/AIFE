@@ -9,3 +9,4 @@
 /models
 *.pyc
 testkokoro.py
+.env
